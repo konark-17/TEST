@@ -159,8 +159,11 @@ def resolve_repo_context(
     # Resolve local git root directory
     if merged.get("repo_path"):
         repo_root = Path(merged["repo_path"]).resolve()
-    else:
+    elif selected_key in ("TEST", "leetcode") or not merged.get("remote_url"):
         repo_root = BASE_DIR
+    else:
+        # Isolated local git repository for distinct GitHub remotes (prevents overwriting BASE_DIR remote)
+        repo_root = (BASE_DIR / "repos" / selected_key).resolve()
 
     # Fallback to local git remote URL if not specified in config
     if not merged.get("remote_url"):
@@ -214,7 +217,11 @@ def get_queued_files(config: dict, repo_filter: str = None) -> list[Path]:
     ignore_names = {".gitkeep", ".DS_Store", "desktop.ini", "Thumbs.db"}
     candidates = []
 
-    for root, _, files in os.walk(queue_dir):
+    for root, dirs, files in os.walk(queue_dir):
+        # Do not enter .git directories
+        dirs[:] = [d for d in dirs if d != ".git"]
+        if ".git" in Path(root).parts:
+            continue
         for file in files:
             if file in ignore_names or file.startswith("."):
                 continue
@@ -310,7 +317,11 @@ def upload_single_file(
     else:
         target_subpath = rel_file
 
-    target_base = repo_root / repo_config.get("target_dir", "uploads")
+    target_dir_conf = repo_config.get("target_dir", "uploads")
+    if repo_root != BASE_DIR and (not target_dir_conf or target_dir_conf.startswith("uploads")):
+        target_base = repo_root
+    else:
+        target_base = repo_root / target_dir_conf
     target_base.mkdir(parents=True, exist_ok=True)
 
     dest_file = get_unique_target_path(target_base, target_subpath)

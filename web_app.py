@@ -146,6 +146,8 @@ async def get_system_status():
 
     if queue_dir.exists():
         for full_path in queue_dir.rglob("*"):
+            if ".git" in full_path.parts:
+                continue
             if full_path.is_file() and not full_path.name.startswith(".") and full_path.name != ".gitkeep":
                 rel = full_path.relative_to(queue_dir)
                 first_part = rel.parts[0] if len(rel.parts) > 1 else None

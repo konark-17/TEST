@@ -39,13 +39,19 @@ class TestUploader(unittest.TestCase):
             "target_dir": "uploads",
             "remote_name": "origin",
             "branch": "main",
-            "remote_url": "",
             "git_user_name": "TestUser",
             "git_user_email": "test@example.com",
             "commit_message_template": "Add {filename} [{date}]",
             "auto_push": False,
             "schedule_time": "10:00",
             "order": "alphabetical",
+            "repos": {
+                "TEST": {
+                    "remote_url": "",
+                    "branch": "main",
+                    "target_dir": "uploads",
+                }
+            },
         }
 
     def tearDown(self):
@@ -57,9 +63,17 @@ class TestUploader(unittest.TestCase):
     def test_queue_empty(self):
         files = uploader.get_queued_files(self.config)
         self.assertEqual(len(files), 0)
-        result = uploader.upload_single_file(self.config)
+        result = uploader.upload_single_file(self.config, repo_name="TEST")
         self.assertFalse(result["success"])
         self.assertEqual(result["message"], "Queue is empty")
+
+    def test_repo_selection_is_compulsory(self):
+        # Create unassigned file directly in queue root
+        (self.queue_dir / "unassigned.py").write_text("print('test')", encoding="utf-8")
+        # Trying to upload without repo should fail
+        result = uploader.upload_single_file(self.config, repo_name=None)
+        self.assertFalse(result["success"])
+        self.assertIn("Repository selection is compulsory", result["message"])
 
     def test_queue_sorting_alphabetical(self):
         # Create dummy files
@@ -77,15 +91,17 @@ class TestUploader(unittest.TestCase):
         self.assertEqual(unique_path.name, "test_1.txt")
 
     def test_upload_single_file_flow(self):
-        # Place 2 files
-        file1 = self.queue_dir / "daily_solution1.py"
-        file2 = self.queue_dir / "daily_solution2.py"
+        # Place 2 files in queue under repo TEST
+        test_queue = self.queue_dir / "TEST"
+        test_queue.mkdir(parents=True, exist_ok=True)
+        file1 = test_queue / "daily_solution1.py"
+        file2 = test_queue / "daily_solution2.py"
         file1.write_text("# solution 1", encoding="utf-8")
         file2.write_text("# solution 2", encoding="utf-8")
 
-        res1 = uploader.upload_single_file(self.config)
+        res1 = uploader.upload_single_file(self.config, repo_name="TEST")
         self.assertTrue(res1["success"])
-        self.assertEqual(res1["file"], "daily_solution1.py")
+        self.assertIn("daily_solution1.py", res1["file"])
         self.assertEqual(res1["files_remaining"], 1)
 
         # Verify moved
@@ -98,7 +114,7 @@ class TestUploader(unittest.TestCase):
 
         # Upload second file with custom date
         custom_dt = datetime(2026, 10, 15, 12, 0, 0)
-        res2 = uploader.upload_single_file(self.config, custom_date=custom_dt)
+        res2 = uploader.upload_single_file(self.config, repo_name="TEST", custom_date=custom_dt)
         self.assertTrue(res2["success"])
         self.assertEqual(res2["files_remaining"], 0)
 
@@ -113,12 +129,14 @@ class TestUploader(unittest.TestCase):
         self.assertEqual(history[1]["filename"], "daily_solution2.py")
 
     def test_upload_batch_spread(self):
-        # Create 3 files in queue
+        # Create 3 files in queue for TEST repo
+        test_queue = self.queue_dir / "TEST"
+        test_queue.mkdir(parents=True, exist_ok=True)
         for i in range(1, 4):
-            (self.queue_dir / f"spread_file_{i}.txt").write_text(f"content {i}", encoding="utf-8")
+            (test_queue / f"spread_file_{i}.txt").write_text(f"content {i}", encoding="utf-8")
 
         # Run batch upload with spread
-        uploader.upload_batch(self.config, count=3, spread_days=True, days_back=3)
+        uploader.upload_batch(self.config, repo_name="TEST", count=3, spread_days=True, days_back=3)
 
         history = uploader.load_history()
         self.assertEqual(len(history), 3)

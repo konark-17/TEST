@@ -52,14 +52,12 @@ DEFAULT_CONFIG = {
     "target_dir": "uploads",
     "remote_name": "origin",
     "branch": "main",
-    "remote_url": "",
     "git_user_name": "konark-17",
     "git_user_email": "kona300107@gmail.com",
     "commit_message_template": "Add {filename} - Daily commit [{date}]",
     "auto_push": True,
     "schedule_time": "10:00",
     "order": "alphabetical",  # "alphabetical", "oldest", "newest"
-    "default_repo": "default",
     "repos": {}
 }
 
@@ -150,13 +148,10 @@ def resolve_repo_context(
         if first_segment and first_segment in repos:
             selected_key = first_segment
 
-    if not selected_key:
-        selected_key = config.get("default_repo", "default")
+    if not selected_key or selected_key not in repos:
+        return config.copy(), None, None
 
-    repo_conf = {}
-    if repos and selected_key in repos:
-        repo_conf = repos[selected_key].copy()
-
+    repo_conf = repos[selected_key].copy()
     merged = config.copy()
     merged.update(repo_conf)
     merged["active_repo_key"] = selected_key
@@ -297,6 +292,16 @@ def upload_single_file(
         rel_file=rel_file,
         override_repo_dir=override_repo_dir,
     )
+    if not active_key or not repo_root:
+        avail = ", ".join(config.get("repos", {}).keys()) or "None configured"
+        err_msg = (
+            f"Repository selection is compulsory! No repository selected for '{rel_file}'. "
+            f"Please specify --repo <name> or place files inside 'queue/<repo_name>/'. "
+            f"Configured repositories: {avail}"
+        )
+        logger.error(err_msg)
+        return {"success": False, "message": err_msg}
+
     ensure_git_setup(repo_config, repo_root=repo_root)
 
     # If the file was in queue/<active_key>/file.ext, strip the repo folder prefix for the target destination
@@ -845,23 +850,20 @@ def show_status(config: dict) -> None:
             if r_cfg.get("repo_path"):
                 print(f"     Path: {path}")
     else:
-        url = config.get("remote_url") or "(Not set - local commits only)"
-        br = config.get("branch", "main")
-        print(f"   * [default] -> {url} [Branch: {br}]")
+        print("   (No repositories configured. Add one using --sync-all-github or the web app!)")
 
     print("-" * 65)
     print(f"Files in Queue    : {len(queued_files)}")
     if queued_files:
         print("Queued items:")
         for idx, file in enumerate(queued_files[:8], 1):
-            # Show repo tag if folder-based
-            first_part = file.parts[0] if len(file.parts) > 1 else "default"
-            tag = f"[{first_part}]" if first_part in repos else "[default]"
+            first_part = file.parts[0] if len(file.parts) > 1 else None
+            tag = f"[{first_part}]" if (first_part and first_part in repos) else "[UNASSIGNED - Move into a repo folder!]"
             print(f"   {idx}. {tag} {file}")
         if len(queued_files) > 8:
             print(f"   ... and {len(queued_files) - 8} more")
     else:
-        print("   (Queue is empty. Drop files into 'queue/' to upload!)")
+        print("   (Queue is empty. Drop files into a repository folder under 'queue/' to upload!)")
 
     print("-" * 65)
     print(f"Total Committed   : {len(history)}")
@@ -869,7 +871,7 @@ def show_status(config: dict) -> None:
         print("Recent uploads:")
         for item in history[-5:]:
             date_info = item.get("commit_date") or item.get("timestamp")
-            repo_tag = f"[{item.get('repo', 'default')}]"
+            repo_tag = f"[{item.get('repo', 'unassigned')}]"
             print(f"   * {repo_tag} [{item.get('commit_hash')}] {item.get('filename')} on {date_info} (Pushed: {item.get('pushed')})")
     print("=" * 65 + "\n")
 
@@ -882,14 +884,28 @@ def interactive_setup() -> None:
     print("=" * 65)
 
     print("\nSelect Setup Mode:")
-    print("  1. Configure Single Repository (Default)")
-    print("  2. Add / Update a Named Repository Profile (Multi-Repo)")
+    print("  1. Add / Update a Named Repository Profile")
+    print("  2. Sync All Repositories From GitHub Account")
     print("  3. Set Git Author Identity (Name & Email)")
     choice = input("Enter choice (1-3) [1]: ").strip() or "1"
 
     if choice == "2":
+        res = sync_all_github_repos(config)
+        print(f"\n[SUCCESS] {res.get('message')}")
+
+    elif choice == "3":
+        name = input(f"Git author name [{config.get('git_user_name', 'konark-17')}]: ").strip()
+        email = input(f"Git author email [{config.get('git_user_email', 'kona300107@gmail.com')}]: ").strip()
+        if name:
+            config["git_user_name"] = name
+        if email:
+            config["git_user_email"] = email
+        save_config(config)
+        print("\n[SUCCESS] Author details saved!")
+
+    else:
         repos = config.get("repos", {})
-        repo_name = input("Enter repository profile name (e.g. leetcode, networking, low-latency): ").strip()
+        repo_name = input("Enter repository profile name (e.g. leetcode, RoutePulse): ").strip()
         if not repo_name:
             print("[CANCELLED] Profile name cannot be empty.")
             return
@@ -898,7 +914,7 @@ def interactive_setup() -> None:
         remote_url = input(f"GitHub Remote URL [{current_entry.get('remote_url', '')}]: ").strip()
         branch = input(f"Branch name [{current_entry.get('branch', 'main')}]: ").strip() or "main"
         repo_path = input(f"Local repo path (Leave empty to use this folder) [{current_entry.get('repo_path', '')}]: ").strip()
-        target_dir = input(f"Target upload subfolder inside repo [{current_entry.get('target_dir', 'uploads')}]: ").strip() or "uploads"
+        target_dir = input(f"Target upload subfolder inside repo [{current_entry.get('target_dir', 'uploads/' + repo_name)}]: ").strip() or f"uploads/{repo_name}"
 
         entry = {
             "remote_url": remote_url if remote_url else current_entry.get("remote_url", ""),
@@ -912,27 +928,6 @@ def interactive_setup() -> None:
         config["repos"] = repos
         save_config(config)
         print(f"\n[SUCCESS] Profile '{repo_name}' saved!")
-
-    elif choice == "3":
-        name = input(f"Git author name [{config.get('git_user_name', 'konark-17')}]: ").strip()
-        email = input(f"Git author email [{config.get('git_user_email', 'kona300107@gmail.com')}]: ").strip()
-        if name:
-            config["git_user_name"] = name
-        if email:
-            config["git_user_email"] = email
-        save_config(config)
-        print("\n[SUCCESS] Author details saved!")
-
-    else:
-        curr_url = config.get("remote_url", "")
-        new_url = input(f"GitHub Remote URL [{curr_url or 'None'}]: ").strip()
-        if new_url:
-            config["remote_url"] = new_url
-        branch = input(f"Target branch [{config.get('branch', 'main')}]: ").strip()
-        if branch:
-            config["branch"] = branch
-        save_config(config)
-        print("\n[SUCCESS] Default repository configuration updated!")
 
     show_status(config)
 

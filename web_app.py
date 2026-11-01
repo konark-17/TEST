@@ -148,12 +148,13 @@ async def get_system_status():
         for full_path in queue_dir.rglob("*"):
             if full_path.is_file() and not full_path.name.startswith(".") and full_path.name != ".gitkeep":
                 rel = full_path.relative_to(queue_dir)
-                first_part = rel.parts[0] if len(rel.parts) > 1 else "default"
+                first_part = rel.parts[0] if len(rel.parts) > 1 else None
                 stat = full_path.stat()
+                repo_name = first_part if (first_part and first_part in config.get("repos", {})) else "Unassigned"
                 queue_files.append({
                     "name": full_path.name,
                     "rel_path": str(rel).replace("\\", "/"),
-                    "repo": first_part if first_part in config.get("repos", {}) else "default",
+                    "repo": repo_name,
                     "size": stat.st_size,
                     "size_str": f"{stat.st_size / 1024:.1f} KB" if stat.st_size >= 1024 else f"{stat.st_size} B",
                     "mtime": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M"),
@@ -241,15 +242,19 @@ async def trigger_batch_upload(req: BatchUploadRequest):
 @app.post("/api/queue/upload")
 async def upload_files_to_queue(
     files: List[UploadFile] = File(...),
-    repo: str = Form("default"),
+    repo: str = Form(...),
 ):
     config = uploader.load_config()
+    repos = config.get("repos", {})
+
+    if not repo or repo == "default" or repo not in repos:
+        raise HTTPException(
+            status_code=400,
+            detail="Repository selection is compulsory! Please select a valid target repository."
+        )
+
     queue_dir = BASE_DIR / config.get("queue_dir", "queue")
-
-    target_queue = queue_dir
-    if repo and repo != "default":
-        target_queue = queue_dir / repo
-
+    target_queue = queue_dir / repo
     target_queue.mkdir(parents=True, exist_ok=True)
     saved = []
 
@@ -259,7 +264,7 @@ async def upload_files_to_queue(
             shutil.copyfileobj(file.file, f)
         saved.append(file.filename)
 
-    return {"success": True, "saved_count": len(saved), "files": saved}
+    return {"success": True, "saved_count": len(saved), "repo": repo, "files": saved}
 
 
 @app.delete("/api/queue/{file_path:path}")

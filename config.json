@@ -3,14 +3,12 @@
   "target_dir": "uploads",
   "remote_name": "origin",
   "branch": "main",
-  "remote_url": "https://github.com/konark-17/TEST.git",
   "git_user_name": "konark-17",
   "git_user_email": "kona300107@gmail.com",
   "commit_message_template": "Add {filename} - Daily commit [{date}]",
   "auto_push": true,
   "schedule_time": "10:00",
   "order": "alphabetical",
-  "default_repo": "default",
   "repos": {
     "TEST": {
       "remote_url": "https://github.com/konark-17/TEST.git",
@@ -23,22 +21,16 @@
       "target_dir": "uploads/leetcode",
       "branch": "main"
     },
-    "NetSentinel-AI": {
-      "remote_url": "https://github.com/konark-17/NetSentinel-AI.git",
-      "branch": "main",
-      "target_dir": "uploads/NetSentinel-AI",
-      "description": ""
-    },
     "RoutePulse": {
       "remote_url": "https://github.com/konark-17/RoutePulse.git",
       "branch": "main",
       "target_dir": "uploads/RoutePulse",
       "description": "High-performance Delivery Route Optimization Engine for grocery logistics using TSP (Nearest Neighbor + 2-Opt), OpenStreetMap geocoding, .and FastAPI. Reduces travel distance by ~25%"
     },
-    "202401096_IT-314_Lab_01": {
-      "remote_url": "https://github.com/konark-17/202401096_IT-314_Lab_01.git",
+    "NetSentinel-AI": {
+      "remote_url": "https://github.com/konark-17/NetSentinel-AI.git",
       "branch": "main",
-      "target_dir": "uploads/202401096_IT-314_Lab_01",
+      "target_dir": "uploads/NetSentinel-AI",
       "description": ""
     },
     "Panchang-App": {
@@ -51,6 +43,12 @@
       "remote_url": "https://github.com/konark-17/AI2Sim.git",
       "branch": "main",
       "target_dir": "uploads/AI2Sim",
+      "description": ""
+    },
+    "202401096_IT-314_Lab_01": {
+      "remote_url": "https://github.com/konark-17/202401096_IT-314_Lab_01.git",
+      "branch": "main",
+      "target_dir": "uploads/202401096_IT-314_Lab_01",
       "description": ""
     },
     "Map-Related-Contest": {

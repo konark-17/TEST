@@ -148,7 +148,7 @@
           <span class="text-xs text-slate-400">configured</span>
         </div>
         <div id="statActiveRepo" class="mt-2 text-xs text-purple-400 truncate">
-          Active: default
+          Tracking Repositories
         </div>
       </div>
 
@@ -214,9 +214,9 @@
             </h2>
             <!-- Repo target dropdown for new uploads -->
             <div class="flex items-center space-x-2">
-              <label class="text-xs text-slate-400">Target Repo:</label>
+              <label class="text-xs text-slate-400">Target Repo <span class="text-red-400 font-bold">*</span>:</label>
               <select id="dropzoneRepoSelect" class="bg-slate-800 text-xs text-slate-200 border border-slate-700 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-blue-500">
-                <option value="default">default</option>
+                <option value="" disabled selected>-- Select Target Repo (Required) --</option>
               </select>
               <button onclick="openAddRepoModal()" class="flex items-center space-x-1 px-2.5 py-1.5 bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 text-xs font-semibold rounded-lg border border-purple-500/30 transition shadow-sm" title="Add or select your GitHub repositories">
                 <i data-lucide="plus" class="w-3.5 h-3.5"></i>
@@ -248,7 +248,6 @@
             <!-- Filter by Repo -->
             <select id="queueFilterRepo" onchange="filterQueueTable()" class="bg-slate-800 text-xs text-slate-200 border border-slate-700 rounded-lg px-2.5 py-1.5 focus:outline-none">
               <option value="ALL">All Repositories</option>
-              <option value="default">default</option>
             </select>
           </div>
 
@@ -301,14 +300,14 @@
           <div id="contentSingle" class="space-y-4">
             <div>
               <div class="flex items-center justify-between mb-1">
-                <label class="block text-xs font-medium text-slate-400">Target Repository Profile</label>
+                <label class="block text-xs font-medium text-slate-400">Target Repository Profile <span class="text-red-400 font-bold">*</span></label>
                 <button onclick="openAddRepoModal()" class="text-xs text-purple-400 hover:text-purple-300 font-semibold flex items-center space-x-1">
                   <i data-lucide="plus" class="w-3 h-3"></i>
                   <span>Add Repo</span>
                 </button>
               </div>
               <select id="singleUploadRepo" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500">
-                <option value="">Auto-Detect / Default</option>
+                <option value="" disabled selected>-- Select Target Repo (Required) --</option>
               </select>
             </div>
 
@@ -608,8 +607,8 @@
           <input type="email" id="settingsAuthorEmail" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white">
         </div>
         <div>
-          <label class="block text-xs text-slate-400 mb-1">Default Remote URL</label>
-          <input type="text" id="settingsRemoteUrl" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white">
+          <label class="block text-xs text-slate-400 mb-1">GitHub Remote URL (Optional Default)</label>
+          <input type="text" id="settingsRemoteUrl" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white" placeholder="https://github.com/konark-17/TEST.git">
         </div>
         <div class="flex items-center space-x-2 pt-1">
           <input type="checkbox" id="settingsAutoPush" class="rounded bg-slate-800 border-slate-700 text-emerald-500">
@@ -646,9 +645,9 @@
       <!-- Sync Live Status Card -->
       <div class="p-4 rounded-xl bg-slate-800/60 border border-slate-700/60 space-y-3">
         <div class="flex items-center justify-between">
-          <span class="text-xs text-slate-400">Target Profile:</span>
+          <span class="text-xs text-slate-400">Target Profile <span class="text-red-400 font-bold">*</span>:</span>
           <select id="modalSyncRepoSelect" onchange="loadSyncModalStatus()" class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-white">
-            <option value="default">default</option>
+            <option value="" disabled selected>-- Select Repo --</option>
           </select>
         </div>
         <div class="flex items-center justify-between">

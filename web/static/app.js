@@ -73,9 +73,9 @@ function renderDashboard(data) {
 
   // Active Repos
   const repoNames = Object.keys(cfg.repos || {});
-  const totalRepos = repoNames.length > 0 ? repoNames.length : 1;
+  const totalRepos = repoNames.length;
   document.getElementById('statRepoCount').innerText = totalRepos;
-  document.getElementById('statActiveRepo').innerText = `Active: ${cfg.default_repo || 'default'}`;
+  document.getElementById('statActiveRepo').innerText = totalRepos > 0 ? `${totalRepos} repos tracked` : 'No repo configured';
 
   // Scheduler state
   const schedState = document.getElementById('statSchedulerState');
@@ -147,33 +147,42 @@ function renderDashboard(data) {
 // Populate Repo Dropdowns across the page
 function populateRepoDropdowns(cfg) {
   const repos = Object.keys(cfg.repos || {});
-  const options = repos.length > 0 ? repos : ['default'];
 
-  const updateSelect = (selectId, includeAll = false) => {
+  const updateSelect = (selectId, includeAll = false, placeholder = '-- Select Target Repo (Required) --') => {
     const el = document.getElementById(selectId);
     if (!el) return;
     const currVal = el.value;
     el.innerHTML = '';
+
     if (includeAll) {
       el.innerHTML += `<option value="ALL">All Repositories</option>`;
+    } else if (repos.length === 0) {
+      el.innerHTML += `<option value="" disabled selected>-- No Repositories (Add One Above) --</option>`;
+    } else {
+      el.innerHTML += `<option value="" disabled ${!currVal ? 'selected' : ''}>${placeholder}</option>`;
     }
-    options.forEach(r => {
+
+    repos.forEach(r => {
       const repoData = (cfg.repos || {})[r] || {};
-      const remote = repoData.remote_url || (r === 'default' ? cfg.remote_url : '');
+      const remote = repoData.remote_url || '';
       const label = remote
         ? `${r} (${remote.replace('https://github.com/', '').replace('.git', '')})`
         : r;
       el.innerHTML += `<option value="${r}">${label}</option>`;
     });
+
     if (currVal && [...el.options].some(o => o.value === currVal)) {
       el.value = currVal;
+    } else if (!includeAll && repos.length > 0 && !currVal) {
+      // Auto-select first repo by default for convenience
+      el.value = repos[0];
     }
   };
 
-  updateSelect('dropzoneRepoSelect', false);
-  updateSelect('singleUploadRepo', false);
+  updateSelect('dropzoneRepoSelect', false, '-- Select Target Repo (Required) --');
+  updateSelect('singleUploadRepo', false, '-- Select Target Repo (Required) --');
   updateSelect('queueFilterRepo', true);
-  updateSelect('modalSyncRepoSelect', false);
+  updateSelect('modalSyncRepoSelect', false, '-- Select Repo to Sync --');
 }
 
 // Render Repositories List
@@ -182,14 +191,17 @@ function renderRepoCards(cfg) {
   container.innerHTML = '';
 
   const repos = cfg.repos || {};
-  const entries = Object.keys(repos).length > 0 ? Object.entries(repos) : [
-    ['default', {
-      remote_url: cfg.remote_url || '',
-      branch: cfg.branch || 'main',
-      target_dir: cfg.target_dir || 'uploads',
-      repo_path: ''
-    }]
-  ];
+  const entries = Object.entries(repos);
+
+  if (entries.length === 0) {
+    container.innerHTML = `
+      <div class="p-4 rounded-xl bg-slate-800/40 border border-slate-700/40 text-center text-slate-400 text-xs">
+        No repositories configured yet. Click <strong class="text-purple-300">+ Add Repo</strong> or <strong class="text-blue-300">Sync All GitHub Repos</strong> to get started!
+      </div>
+    `;
+    lucide.createIcons();
+    return;
+  }
 
   entries.forEach(([name, r]) => {
     const card = document.createElement('div');
@@ -206,7 +218,7 @@ function renderRepoCards(cfg) {
         </div>
         <div class="flex items-center space-x-1">
           ${r.remote_url ? `<button onclick="testRemoteUrl('${r.remote_url}')" class="p-1 hover:text-emerald-400 text-slate-400" title="Test Connection"><i data-lucide="wifi" class="w-3.5 h-3.5"></i></button>` : ''}
-          ${name !== 'default' ? `<button onclick="deleteRepo('${name}')" class="p-1 hover:text-red-400 text-slate-400" title="Delete Repo"><i data-lucide="trash" class="w-3.5 h-3.5"></i></button>` : ''}
+          <button onclick="deleteRepo('${name}')" class="p-1 hover:text-red-400 text-slate-400" title="Delete Repo"><i data-lucide="trash" class="w-3.5 h-3.5"></i></button>
         </div>
       </div>
       <div class="text-[11px] text-slate-400 truncate font-mono">
@@ -296,7 +308,7 @@ function renderHistoryTable(history, cfg) {
     tr.innerHTML = `
       <td class="py-2.5 px-3 font-mono text-emerald-400 font-semibold">${item.commit_hash || '---'}</td>
       <td class="py-2.5 px-3">
-        <span class="px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300 border border-slate-700">${item.repo || 'default'}</span>
+        <span class="px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-slate-300 border border-slate-700">${item.repo || 'Unassigned'}</span>
       </td>
       <td class="py-2.5 px-3 text-white truncate max-w-[150px]" title="${item.filename}">${item.filename}</td>
       <td class="py-2.5 px-3 text-slate-400 text-[11px]">${item.commit_date || item.timestamp}</td>
@@ -391,7 +403,11 @@ function setupDropzone() {
 
 // Upload dropped files to queue endpoint
 async function handleFilesUpload(fileList) {
-  const repo = document.getElementById('dropzoneRepoSelect').value || 'default';
+  const repo = document.getElementById('dropzoneRepoSelect').value;
+  if (!repo || repo === 'default') {
+    showToast('Repository selection is compulsory! Please select a target repository before adding files.', 'error');
+    return;
+  }
   const formData = new FormData();
   formData.append('repo', repo);
 
@@ -420,10 +436,14 @@ async function handleFilesUpload(fileList) {
 
 // Trigger Single Upload
 async function triggerSingleUpload() {
-  const repo = document.getElementById('singleUploadRepo').value || null;
+  const repo = document.getElementById('singleUploadRepo').value;
+  if (!repo || repo === 'default') {
+    showToast('Repository selection is compulsory! Please select a target repository.', 'error');
+    return;
+  }
   const dryRun = document.getElementById('singleDryRun').checked;
 
-  showToast(dryRun ? 'Simulating upload (Dry-Run)...' : 'Uploading next file...', 'info');
+  showToast(dryRun ? `Simulating upload to '${repo}' (Dry-Run)...` : `Uploading next file to '${repo}'...`, 'info');
 
   try {
     const res = await fetch('/api/upload-single', {
@@ -454,12 +474,16 @@ async function triggerUploadFile(repoName) {
 
 // Trigger Streak Spreader
 async function triggerStreakSpreader() {
+  const repo = document.getElementById('singleUploadRepo').value;
+  if (!repo || repo === 'default') {
+    showToast('Repository selection is compulsory! Please select a target repository.', 'error');
+    return;
+  }
   const count = parseInt(document.getElementById('streakFileCount').value) || 5;
   const daysBack = parseInt(document.getElementById('streakDaysBack').value) || 14;
   const dryRun = document.getElementById('streakDryRun').checked;
-  const repo = document.getElementById('singleUploadRepo').value || null;
 
-  showToast(`Executing Streak Spreader for ${count} files over ${daysBack} days...`, 'info');
+  showToast(`Executing Streak Spreader for ${count} files over ${daysBack} days in '${repo}'...`, 'info');
 
   try {
     const res = await fetch('/api/upload-batch', {
@@ -960,10 +984,14 @@ function openSyncModal() {
   const select = document.getElementById('modalSyncRepoSelect');
   if (select) {
     select.innerHTML = '';
-    const opts = ['default', ...repos.filter(r => r !== 'default')];
-    opts.forEach(r => {
-      select.innerHTML += `<option value="${r}">${r}</option>`;
-    });
+    if (repos.length === 0) {
+      select.innerHTML = `<option value="" disabled selected>-- No Repositories Configured --</option>`;
+    } else {
+      repos.forEach(r => {
+        select.innerHTML += `<option value="${r}">${r}</option>`;
+      });
+      select.value = repos[0];
+    }
   }
 
   loadSyncModalStatus();
@@ -971,12 +999,18 @@ function openSyncModal() {
 }
 
 async function loadSyncModalStatus() {
-  const repo = document.getElementById('modalSyncRepoSelect')?.value || 'default';
+  const repo = document.getElementById('modalSyncRepoSelect')?.value;
   const pill = document.getElementById('modalSyncStatusPill');
   const aheadEl = document.getElementById('modalSyncAhead');
   const behindEl = document.getElementById('modalSyncBehind');
   const urlInput = document.getElementById('modalSyncRemoteUrl');
   const branchInput = document.getElementById('modalSyncBranch');
+
+  if (!repo) {
+    pill.innerText = 'No Repo Selected';
+    pill.className = 'text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-700 text-slate-300';
+    return;
+  }
 
   pill.innerText = 'Checking...';
   pill.className = 'text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-700 text-slate-300';
@@ -1007,7 +1041,11 @@ async function loadSyncModalStatus() {
 }
 
 async function executeModalSync(action = 'sync') {
-  const repo = document.getElementById('modalSyncRepoSelect')?.value || 'default';
+  const repo = document.getElementById('modalSyncRepoSelect')?.value;
+  if (!repo) {
+    showToast('Repository selection is compulsory! Please select a repository.', 'error');
+    return;
+  }
   const remoteUrl = document.getElementById('modalSyncRemoteUrl')?.value.trim();
   const branch = document.getElementById('modalSyncBranch')?.value.trim() || 'main';
 

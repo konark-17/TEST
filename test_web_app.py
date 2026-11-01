@@ -32,25 +32,29 @@ class TestWebApp(unittest.TestCase):
         self.assertIn("logs", data)
 
     def test_queue_file_upload_and_delete(self):
-        # Test uploading a file via multipart form
+        # Test uploading a file via multipart form to compulsory target repo 'TEST'
         file_content = b"print('Hello from web uploader test')"
         files = {"files": ("test_web_snippet.py", file_content, "text/plain")}
-        data = {"repo": "default"}
+        data = {"repo": "TEST"}
         response = client.post("/api/queue/upload", files=files, data=data)
         self.assertEqual(response.status_code, 200)
         res_data = response.json()
         self.assertTrue(res_data["success"])
         self.assertIn("test_web_snippet.py", res_data["files"])
 
-        # Test previewing the newly uploaded file
-        prev_res = client.get("/api/queue/preview/test_web_snippet.py")
+        # Test previewing the newly uploaded file under TEST queue folder
+        prev_res = client.get("/api/queue/preview/TEST/test_web_snippet.py")
         self.assertEqual(prev_res.status_code, 200)
         self.assertIn("Hello from web uploader test", prev_res.json()["content"])
 
         # Test deleting the file
-        del_res = client.delete("/api/queue/test_web_snippet.py")
+        del_res = client.delete("/api/queue/TEST/test_web_snippet.py")
         self.assertEqual(del_res.status_code, 200)
         self.assertTrue(del_res.json()["success"])
+
+        # Also test that uploading without repo or with 'default' fails with 400
+        fail_res = client.post("/api/queue/upload", files={"files": ("bad.py", b"bad", "text/plain")}, data={"repo": "default"})
+        self.assertEqual(fail_res.status_code, 400)
 
     def test_sync_status_endpoint(self):
         response = client.get("/api/sync/status")

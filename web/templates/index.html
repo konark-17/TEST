@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GitFlow - Automated GitHub Uploader</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="/static/style.css">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#ecfdf5',
+              500: '#10b981',
+              600: '#059669',
+              700: '#047857'
+            },
+            dark: {
+              900: '#0b0f19',
+              800: '#111827',
+              700: '#1f2937',
+              600: '#374151'
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="min-h-screen text-slate-200 antialiased selection:bg-emerald-500 selection:text-white">
+
+  <!-- Header -->
+  <header class="border-b border-slate-800/80 bg-slate-900/60 sticky top-0 z-40 backdrop-blur-md">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="h-9 w-9 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center shadow-lg shadow-emerald-500/20">
+          <i data-lucide="git-pull-request-arrow" class="w-5 h-5 text-slate-950 stroke-[2.5]"></i>
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <h1 class="font-bold text-lg text-white tracking-tight">GitFlow</h1>
+            <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Auto Uploader</span>
+          </div>
+          <p class="text-xs text-slate-400">Daily GitHub Streak & Multi-Repo Automation</p>
+        </div>
+      </div>
+
+      <!-- Header actions & User Badge -->
+      <div class="flex items-center space-x-3">
+        <!-- Author Info -->
+        <div id="authorBadge" class="hidden sm:flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-slate-800/80 border border-slate-700/60 text-xs">
+          <i data-lucide="user-check" class="w-3.5 h-3.5 text-emerald-400"></i>
+          <span id="authorName" class="font-medium text-slate-300">konark-17</span>
+        </div>
+
+        <!-- Refresh button -->
+        <button onclick="refreshAll()" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition" title="Refresh Dashboard">
+          <i data-lucide="refresh-cw" id="refreshIcon" class="w-4 h-4"></i>
+        </button>
+
+        <!-- Settings button -->
+        <button onclick="openModal('settingsModal')" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition" title="Settings">
+          <i data-lucide="settings" class="w-4 h-4"></i>
+        </button>
+
+        <!-- Quick 1-Click Upload Trigger -->
+        <button onclick="triggerSingleUpload()" class="flex items-center space-x-2 px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-semibold text-sm transition shadow-lg shadow-emerald-500/20 btn-glow-emerald">
+          <i data-lucide="upload-cloud" class="w-4 h-4 stroke-[2.5]"></i>
+          <span>Upload 1 File</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+
+    <!-- KPI Stats Cards -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <!-- Total Queued -->
+      <div class="glass-panel p-5 rounded-2xl relative overflow-hidden">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Queue Depth</span>
+          <div class="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-400">
+            <i data-lucide="layers" class="w-4 h-4"></i>
+          </div>
+        </div>
+        <div class="mt-4 flex items-baseline space-x-2">
+          <span id="statQueueCount" class="text-3xl font-bold text-white">0</span>
+          <span class="text-xs text-slate-400">files pending</span>
+        </div>
+        <div id="statQueueSub" class="mt-2 text-xs text-slate-400 flex items-center space-x-1">
+          <span>Ready to upload</span>
+        </div>
+      </div>
+
+      <!-- Total Committed -->
+      <div class="glass-panel p-5 rounded-2xl relative overflow-hidden">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Total Uploaded</span>
+          <div class="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-400">
+            <i data-lucide="git-commit" class="w-4 h-4"></i>
+          </div>
+        </div>
+        <div class="mt-4 flex items-baseline space-x-2">
+          <span id="statCommittedCount" class="text-3xl font-bold text-emerald-400">0</span>
+          <span class="text-xs text-slate-400">commits made</span>
+        </div>
+        <div class="mt-2 text-xs text-emerald-400/80 flex items-center space-x-1">
+          <i data-lucide="check-circle" class="w-3 h-3"></i>
+          <span>Streak active</span>
+        </div>
+      </div>
+
+      <!-- Configured Repos -->
+      <div class="glass-panel p-5 rounded-2xl relative overflow-hidden">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Repositories</span>
+          <div class="w-8 h-8 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-400">
+            <i data-lucide="folder-git-2" class="w-4 h-4"></i>
+          </div>
+        </div>
+        <div class="mt-4 flex items-baseline space-x-2">
+          <span id="statRepoCount" class="text-3xl font-bold text-white">1</span>
+          <span class="text-xs text-slate-400">configured</span>
+        </div>
+        <div id="statActiveRepo" class="mt-2 text-xs text-purple-400 truncate">
+          Active: default
+        </div>
+      </div>
+
+      <!-- Windows Task Scheduler -->
+      <div class="glass-panel p-5 rounded-2xl relative overflow-hidden">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Daily Automation</span>
+          <div id="schedulerIconBox" class="w-8 h-8 rounded-lg bg-amber-500/10 flex items-center justify-center text-amber-400">
+            <i data-lucide="calendar-clock" class="w-4 h-4"></i>
+          </div>
+        </div>
+        <div class="mt-4 flex items-baseline space-x-2">
+          <span id="statSchedulerState" class="text-lg font-bold text-white">Checking...</span>
+        </div>
+        <div id="statSchedulerNext" class="mt-2 text-xs text-slate-400 truncate">
+          Next run: --
+        </div>
+      </div>
+    </div>
+
+    <!-- GitHub Contribution Heatmap Card -->
+    <div class="glass-panel p-6 rounded-2xl">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+        <div>
+          <h2 class="text-base font-bold text-white flex items-center space-x-2">
+            <i data-lucide="flame" class="w-5 h-5 text-amber-400"></i>
+            <span>Commit Streak & Activity Matrix</span>
+          </h2>
+          <p class="text-xs text-slate-400 mt-0.5">Visualization of uploads committed through this tool</p>
+        </div>
+        <div class="flex items-center space-x-2 text-xs text-slate-400">
+          <span>Less</span>
+          <div class="flex space-x-1">
+            <div class="w-3 h-3 rounded-sm bg-slate-800"></div>
+            <div class="w-3 h-3 rounded-sm bg-emerald-900"></div>
+            <div class="w-3 h-3 rounded-sm bg-emerald-600"></div>
+            <div class="w-3 h-3 rounded-sm bg-emerald-400"></div>
+          </div>
+          <span>More</span>
+        </div>
+      </div>
+
+      <!-- Heatmap Cells Grid -->
+      <div class="mt-4 overflow-x-auto pb-2">
+        <div id="heatmapGrid" class="flex gap-1.5 min-w-[700px]">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Main 2-Column Section -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+
+      <!-- LEFT COLUMN: Queue & Dropzone (7 Cols) -->
+      <div class="lg:col-span-7 space-y-6">
+
+        <!-- Drag & Drop Zone -->
+        <div class="glass-panel p-6 rounded-2xl">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-base font-bold text-white flex items-center space-x-2">
+              <i data-lucide="file-plus" class="w-5 h-5 text-blue-400"></i>
+              <span>Add Files to Queue</span>
+            </h2>
+            <!-- Repo target dropdown for new uploads -->
+            <div class="flex items-center space-x-2">
+              <label class="text-xs text-slate-400">Target Repo:</label>
+              <select id="dropzoneRepoSelect" class="bg-slate-800 text-xs text-slate-200 border border-slate-700 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-blue-500">
+                <option value="default">default</option>
+              </select>
+            </div>
+          </div>
+
+          <div id="dropzone" class="border-2 border-dashed border-slate-700/80 hover:border-slate-500 rounded-xl p-8 text-center cursor-pointer transition bg-slate-900/40">
+            <input type="file" id="fileInput" multiple class="hidden">
+            <div class="w-12 h-12 rounded-xl bg-blue-500/10 text-blue-400 flex items-center justify-center mx-auto mb-3">
+              <i data-lucide="upload" class="w-6 h-6"></i>
+            </div>
+            <p class="text-sm font-medium text-white">Drag & drop files here, or <span class="text-blue-400 underline">browse</span></p>
+            <p class="text-xs text-slate-400 mt-1">Upload code, problems, solutions, notes (.py, .cpp, .go, .md, etc.)</p>
+          </div>
+        </div>
+
+        <!-- Queue Files List Table -->
+        <div class="glass-panel p-6 rounded-2xl">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h2 class="text-base font-bold text-white flex items-center space-x-2">
+                <i data-lucide="list-ordered" class="w-5 h-5 text-emerald-400"></i>
+                <span>Files in Queue (<span id="queueCountBadge">0</span>)</span>
+              </h2>
+              <p class="text-xs text-slate-400 mt-0.5">Will be uploaded one-by-one in this order</p>
+            </div>
+            <!-- Filter by Repo -->
+            <select id="queueFilterRepo" onchange="filterQueueTable()" class="bg-slate-800 text-xs text-slate-200 border border-slate-700 rounded-lg px-2.5 py-1.5 focus:outline-none">
+              <option value="ALL">All Repositories</option>
+              <option value="default">default</option>
+            </select>
+          </div>
+
+          <!-- Table Container -->
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs text-slate-300">
+              <thead class="text-[11px] uppercase tracking-wider text-slate-400 bg-slate-800/50 border-b border-slate-700/60">
+                <tr>
+                  <th class="py-3 px-3">File</th>
+                  <th class="py-3 px-3">Repo</th>
+                  <th class="py-3 px-3">Size</th>
+                  <th class="py-3 px-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="queueTableBody" class="divide-y divide-slate-800">
+                <!-- Rows injected via JS -->
+                <tr>
+                  <td colspan="4" class="py-8 text-center text-slate-500">
+                    Queue is empty. Drop files above to get started!
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- RIGHT COLUMN: Trigger Center, Repos & Scheduler (5 Cols) -->
+      <div class="lg:col-span-5 space-y-6">
+
+        <!-- Trigger Center & Streak Spreader -->
+        <div class="glass-panel p-6 rounded-2xl">
+          <h2 class="text-base font-bold text-white flex items-center space-x-2 mb-4">
+            <i data-lucide="zap" class="w-5 h-5 text-amber-400"></i>
+            <span>Upload Trigger Center</span>
+          </h2>
+
+          <!-- Action Tabs -->
+          <div class="flex border-b border-slate-800 mb-5">
+            <button onclick="switchTab('single')" id="tabSingle" class="flex-1 pb-2 text-xs font-semibold text-emerald-400 border-b-2 border-emerald-400 transition">
+              Upload Single
+            </button>
+            <button onclick="switchTab('streak')" id="tabStreak" class="flex-1 pb-2 text-xs font-semibold text-slate-400 hover:text-slate-200 transition">
+              Streak Spreader
+            </button>
+          </div>
+
+          <!-- Tab Content: Single Upload -->
+          <div id="contentSingle" class="space-y-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1">Target Repository Profile</label>
+              <select id="singleUploadRepo" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500">
+                <option value="">Auto-Detect / Default</option>
+              </select>
+            </div>
+
+            <div class="flex items-center space-x-2">
+              <input type="checkbox" id="singleDryRun" class="rounded bg-slate-800 border-slate-700 text-emerald-500 focus:ring-0">
+              <label for="singleDryRun" class="text-xs text-slate-300">Dry-Run (Simulate without committing)</label>
+            </div>
+
+            <button onclick="triggerSingleUpload()" class="w-full py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs uppercase tracking-wider transition shadow-lg shadow-emerald-500/20 btn-glow-emerald">
+              Upload Next File Now
+            </button>
+          </div>
+
+          <!-- Tab Content: Streak Spreader -->
+          <div id="contentStreak" class="space-y-4 hidden">
+            <div class="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 flex items-start space-x-2">
+              <i data-lucide="info" class="w-4 h-4 shrink-0 mt-0.5"></i>
+              <span>Spreads queued files across past days (1 commit/day) to build your GitHub contribution streak!</span>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs text-slate-400 mb-1">Files to commit</label>
+                <input type="number" id="streakFileCount" value="5" min="1" max="50" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white">
+              </div>
+              <div>
+                <label class="block text-xs text-slate-400 mb-1">Days in the past</label>
+                <input type="number" id="streakDaysBack" value="14" min="1" max="365" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white">
+              </div>
+            </div>
+
+            <div class="flex items-center space-x-2">
+              <input type="checkbox" id="streakDryRun" class="rounded bg-slate-800 border-slate-700 text-emerald-500 focus:ring-0">
+              <label for="streakDryRun" class="text-xs text-slate-300">Dry-Run (Preview streak dates)</label>
+            </div>
+
+            <button onclick="triggerStreakSpreader()" class="w-full py-2.5 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-bold text-xs uppercase tracking-wider transition shadow-lg shadow-amber-500/20">
+              Run Streak Spreader
+            </button>
+          </div>
+        </div>
+
+        <!-- Windows Task Scheduler Panel -->
+        <div class="glass-panel p-6 rounded-2xl">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-base font-bold text-white flex items-center space-x-2">
+              <i data-lucide="clock" class="w-5 h-5 text-indigo-400"></i>
+              <span>Windows Daily Scheduler</span>
+            </h2>
+            <span id="schedulerBadge" class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700">
+              Checking
+            </span>
+          </div>
+
+          <p class="text-xs text-slate-400 mb-4">
+            Runs fully headless in Windows background once per day without needing this browser open.
+          </p>
+
+          <div class="space-y-3">
+            <div class="flex items-center space-x-3">
+              <input type="time" id="schedulerTimeInput" value="10:00" class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500">
+              <button onclick="installScheduler()" class="flex-1 py-2 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition">
+                Set Daily Schedule
+              </button>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 pt-2">
+              <button onclick="runSchedulerNow()" class="py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs transition flex items-center justify-center space-x-1">
+                <i data-lucide="play" class="w-3.5 h-3.5 text-emerald-400"></i>
+                <span>Test Run Now</span>
+              </button>
+              <button onclick="removeScheduler()" class="py-2 px-3 rounded-lg bg-slate-800 hover:bg-red-500/20 text-red-400 border border-slate-700 text-xs transition flex items-center justify-center space-x-1">
+                <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                <span>Disable Task</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Repositories Management (Repo-Wise) -->
+        <div class="glass-panel p-6 rounded-2xl">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-base font-bold text-white flex items-center space-x-2">
+              <i data-lucide="git-branch" class="w-5 h-5 text-purple-400"></i>
+              <span>Repositories</span>
+            </h2>
+            <button onclick="openAddRepoModal()" class="flex items-center space-x-1 text-xs text-purple-400 hover:text-purple-300 font-semibold transition">
+              <i data-lucide="plus" class="w-4 h-4"></i>
+              <span>Add Repo</span>
+            </button>
+          </div>
+
+          <div id="repoCardsContainer" class="space-y-3">
+            <!-- Repositories injected via JS -->
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Bottom Section: Commit History & Live Terminal Log -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+
+      <!-- Commit History (7 Cols) -->
+      <div class="lg:col-span-7 glass-panel p-6 rounded-2xl">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-base font-bold text-white flex items-center space-x-2">
+            <i data-lucide="history" class="w-5 h-5 text-teal-400"></i>
+            <span>Commit History (<span id="historyCount">0</span>)</span>
+          </h2>
+          <span class="text-xs text-slate-400">Recent uploads</span>
+        </div>
+
+        <div class="overflow-x-auto max-h-[360px]">
+          <table class="w-full text-left text-xs text-slate-300">
+            <thead class="text-[11px] uppercase tracking-wider text-slate-400 bg-slate-800/50 sticky top-0 border-b border-slate-700">
+              <tr>
+                <th class="py-2.5 px-3">Commit</th>
+                <th class="py-2.5 px-3">Repo</th>
+                <th class="py-2.5 px-3">File</th>
+                <th class="py-2.5 px-3">Date</th>
+                <th class="py-2.5 px-3 text-right">Push</th>
+              </tr>
+            </thead>
+            <tbody id="historyTableBody" class="divide-y divide-slate-800">
+              <!-- Injected by JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Live Terminal Log Viewer (5 Cols) -->
+      <div class="lg:col-span-5 glass-panel p-6 rounded-2xl flex flex-col">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-base font-bold text-white flex items-center space-x-2">
+            <i data-lucide="terminal" class="w-5 h-5 text-emerald-400"></i>
+            <span>Live Logs</span>
+          </h2>
+          <button onclick="fetchLogs()" class="text-xs text-slate-400 hover:text-white transition">
+            Clear / Refresh
+          </button>
+        </div>
+
+        <div id="logConsole" class="flex-1 bg-slate-950 rounded-xl p-4 font-mono text-[11px] text-slate-300 overflow-y-auto max-h-[340px] border border-slate-800 space-y-1">
+          <div class="text-slate-500">Connecting to log stream...</div>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- MODAL: File Preview -->
+  <div id="previewModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="glass-panel bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-3xl max-h-[80vh] flex flex-col shadow-2xl">
+      <div class="flex items-center justify-between p-4 border-b border-slate-800">
+        <h3 id="previewTitle" class="font-bold text-sm text-white font-mono">file.py</h3>
+        <button onclick="closeModal('previewModal')" class="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <div class="p-4 flex-1 overflow-auto bg-slate-950">
+        <pre id="previewContent" class="font-mono text-xs text-slate-300 leading-relaxed whitespace-pre-wrap"></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Add / Edit Repository -->
+  <div id="repoModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="glass-panel bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <h3 id="repoModalTitle" class="font-bold text-base text-white">Add Repository Profile</h3>
+        <button onclick="closeModal('repoModal')" class="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">Profile Name (e.g. leetcode, networking)</label>
+          <input type="text" id="repoModalName" placeholder="leetcode" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white">
+        </div>
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">GitHub Remote URL</label>
+          <input type="text" id="repoModalUrl" placeholder="https://github.com/konark-17/my-repo.git" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Branch</label>
+            <input type="text" id="repoModalBranch" value="main" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white">
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1">Uploads Folder</label>
+            <input type="text" id="repoModalTargetDir" value="uploads" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white">
+          </div>
+        </div>
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">Local Repo Path (Optional)</label>
+          <input type="text" id="repoModalPath" placeholder="Leave blank to use current project" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white">
+        </div>
+      </div>
+
+      <div class="flex space-x-2 pt-2">
+        <button onclick="testRemoteFromModal()" class="flex-1 py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 border border-slate-700 transition">
+          Test Remote
+        </button>
+        <button onclick="saveRepoProfile()" class="flex-1 py-2 px-3 rounded-lg bg-purple-600 hover:bg-purple-500 text-xs font-semibold text-white transition">
+          Save Profile
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Settings -->
+  <div id="settingsModal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="glass-panel bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <h3 class="font-bold text-base text-white">Global Git & App Settings</h3>
+        <button onclick="closeModal('settingsModal')" class="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">Git Author Name</label>
+          <input type="text" id="settingsAuthorName" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white">
+        </div>
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">Git Author Email</label>
+          <input type="email" id="settingsAuthorEmail" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white">
+        </div>
+        <div>
+          <label class="block text-xs text-slate-400 mb-1">Default Remote URL</label>
+          <input type="text" id="settingsRemoteUrl" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white">
+        </div>
+        <div class="flex items-center space-x-2 pt-1">
+          <input type="checkbox" id="settingsAutoPush" class="rounded bg-slate-800 border-slate-700 text-emerald-500">
+          <label for="settingsAutoPush" class="text-xs text-slate-300">Auto-push commits to GitHub</label>
+        </div>
+      </div>
+
+      <div class="pt-2">
+        <button onclick="saveGlobalSettings()" class="w-full py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs uppercase tracking-wider transition">
+          Save Settings
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Alert Container -->
+  <div id="toastContainer" class="fixed bottom-5 right-5 z-50 space-y-2 pointer-events-none"></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

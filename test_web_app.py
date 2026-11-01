@@ -52,6 +52,15 @@ class TestWebApp(unittest.TestCase):
         self.assertEqual(del_res.status_code, 200)
         self.assertTrue(del_res.json()["success"])
 
+    def test_sync_status_endpoint(self):
+        response = client.get("/api/sync/status")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIn("configured", data)
+        self.assertIn("ahead", data)
+        self.assertIn("behind", data)
+        self.assertIn("status_text", data)
+
 
 if __name__ == "__main__":
     unittest.main()

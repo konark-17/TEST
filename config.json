@@ -3,12 +3,19 @@
   "target_dir": "uploads",
   "remote_name": "origin",
   "branch": "main",
-  "remote_url": "",
+  "remote_url": "https://github.com/konark-17/TEST.git",
   "git_user_name": "konark-17",
   "git_user_email": "kona300107@gmail.com",
   "commit_message_template": "Add {filename} - Daily commit [{date}]",
   "auto_push": true,
   "schedule_time": "10:00",
-  "order": "alphabetical"
+  "order": "alphabetical",
+  "default_repo": "default",
+  "repos": {
+    "leetcode": {
+      "remote_url": "https://github.com/konark-17/TEST.git",
+      "target_dir": "uploads/leetcode",
+      "branch": "main"
+    }
+  }
 }
-

@@ -167,6 +167,13 @@ def resolve_repo_context(
     else:
         repo_root = BASE_DIR
 
+    # Fallback to local git remote URL if not specified in config
+    if not merged.get("remote_url"):
+        remote_name = merged.get("remote_name", "origin")
+        res_r = run_git_cmd(["remote", "get-url", remote_name], cwd=repo_root)
+        if res_r.returncode == 0 and res_r.stdout.strip():
+            merged["remote_url"] = res_r.stdout.strip()
+
     return merged, selected_key, repo_root
 
 
@@ -423,6 +430,235 @@ def upload_single_file(
         "commit_date": date_iso,
         "pushed": pushed,
         "files_remaining": remaining_after,
+    }
+
+
+def reconcile_history(repo_root: Path = BASE_DIR, branch: str = "main", remote_name: str = "origin") -> int:
+    """
+    Checks each commit in upload_history.json. If it is already merged into the remote branch,
+    updates its status to pushed: True.
+    """
+    history = load_history()
+    updated_count = 0
+    upstream = f"{remote_name}/{branch}"
+    for item in history:
+        if not item.get("pushed"):
+            h = item.get("commit_hash")
+            if h and h != "unknown":
+                res = run_git_cmd(["merge-base", "--is-ancestor", h, upstream], cwd=repo_root)
+                if res.returncode == 0:
+                    item["pushed"] = True
+                    updated_count += 1
+    if updated_count > 0:
+        with open(HISTORY_PATH, "w", encoding="utf-8") as f:
+            json.dump(history, f, indent=2)
+    return updated_count
+
+
+def get_sync_status(config: dict, repo_name: str = None, repo_root: Path = None) -> dict:
+    """
+    Get detailed GitHub synchronization status:
+    - Remote URL
+    - Upstream branch
+    - Unpushed (ahead) commits count
+    - Unpulled (behind) commits count
+    - Reachability / Auth status
+    """
+    if repo_root is None:
+        repo_cfg, active_key, repo_root = resolve_repo_context(config, repo_name=repo_name)
+    else:
+        repo_cfg, active_key, _ = resolve_repo_context(config, repo_name=repo_name)
+
+    remote_name = repo_cfg.get("remote_name", "origin")
+    branch = repo_cfg.get("branch", "main")
+    remote_url = repo_cfg.get("remote_url", "").strip()
+
+    # If remote_url is empty in config, check if git remote has one
+    if not remote_url:
+        res = run_git_cmd(["remote", "get-url", remote_name], cwd=repo_root)
+        if res.returncode == 0:
+            remote_url = res.stdout.strip()
+
+    if not remote_url:
+        return {
+            "configured": False,
+            "connected": False,
+            "remote_url": "",
+            "branch": branch,
+            "repo_name": active_key,
+            "ahead": 0,
+            "behind": 0,
+            "status_text": "No GitHub remote repository connected",
+            "badge_color": "slate",
+        }
+
+    # Test reachability with git ls-remote (fast check)
+    ls_res = run_git_cmd(["ls-remote", "--exit-code", "-h", remote_url], cwd=repo_root)
+    reachable = (ls_res.returncode == 0)
+
+    # Check upstream tracking
+    upstream_res = run_git_cmd(["rev-parse", "--abbrev-ref", "@{u}"], cwd=repo_root)
+    has_upstream = (upstream_res.returncode == 0)
+
+    ahead = 0
+    behind = 0
+    if has_upstream:
+        c_ahead = run_git_cmd(["rev-list", "--count", "@{u}..HEAD"], cwd=repo_root)
+        if c_ahead.returncode == 0:
+            try:
+                ahead = int(c_ahead.stdout.strip())
+            except ValueError:
+                ahead = 0
+        c_behind = run_git_cmd(["rev-list", "--count", "HEAD..@{u}"], cwd=repo_root)
+        if c_behind.returncode == 0:
+            try:
+                behind = int(c_behind.stdout.strip())
+            except ValueError:
+                behind = 0
+    else:
+        c_local = run_git_cmd(["rev-list", "--count", "HEAD"], cwd=repo_root)
+        if c_local.returncode == 0:
+            try:
+                ahead = int(c_local.stdout.strip())
+            except ValueError:
+                ahead = 0
+
+    if not reachable:
+        status_text = "Remote unreachable (Check URL or internet connection)"
+        badge_color = "red"
+    elif ahead > 0 and behind > 0:
+        status_text = f"Diverged ({ahead} unpushed, {behind} unpulled)"
+        badge_color = "amber"
+    elif ahead > 0:
+        status_text = f"{ahead} commit(s) ready to push to GitHub"
+        badge_color = "amber"
+    elif behind > 0:
+        status_text = f"{behind} commit(s) waiting to be pulled from GitHub"
+        badge_color = "blue"
+    else:
+        status_text = "Fully in sync with GitHub"
+        badge_color = "emerald"
+
+    return {
+        "configured": True,
+        "connected": reachable,
+        "remote_url": remote_url,
+        "branch": branch,
+        "repo_name": active_key,
+        "has_upstream": has_upstream,
+        "ahead": ahead,
+        "behind": behind,
+        "status_text": status_text,
+        "badge_color": badge_color,
+    }
+
+
+def sync_repo(
+    config: dict,
+    repo_name: str = None,
+    remote_url: str = None,
+    branch: str = None,
+    action: str = "sync",  # "sync" (both), "push", "pull"
+) -> dict:
+    """
+    Sync local repository with remote GitHub repository.
+    Handles:
+    - Setting/updating remote URL
+    - Pulling with rebase/autostash
+    - Pushing with upstream tracking
+    - Reconciling history
+    """
+    repo_cfg, active_key, repo_root = resolve_repo_context(config, repo_name=repo_name)
+
+    if remote_url:
+        repo_cfg["remote_url"] = remote_url.strip()
+    if branch:
+        repo_cfg["branch"] = branch.strip()
+
+    # Save to config if URL was updated
+    if remote_url or branch:
+        if active_key in config.get("repos", {}):
+            if remote_url:
+                config["repos"][active_key]["remote_url"] = remote_url.strip()
+            if branch:
+                config["repos"][active_key]["branch"] = branch.strip()
+        else:
+            if remote_url:
+                config["remote_url"] = remote_url.strip()
+            if branch:
+                config["branch"] = branch.strip()
+        save_config(config)
+
+    ensure_git_setup(repo_cfg, repo_root=repo_root)
+
+    eff_remote_url = repo_cfg.get("remote_url", "").strip()
+    remote_name = repo_cfg.get("remote_name", "origin")
+    eff_branch = repo_cfg.get("branch", "main")
+
+    if not eff_remote_url:
+        return {
+            "success": False,
+            "message": "No remote URL configured. Please enter your GitHub repository URL.",
+        }
+
+    logger.info(f"[{active_key}] Starting GitHub sync for {eff_remote_url} (branch: {eff_branch})...")
+    pulled_count = 0
+    pushed_count = 0
+
+    # 1. Fetch
+    fetch_res = run_git_cmd(["fetch", remote_name], cwd=repo_root)
+    if fetch_res.returncode != 0:
+        logger.warning(f"git fetch notice: {fetch_res.stderr.strip() or fetch_res.stdout.strip()}")
+
+    # 2. Pull if action is 'pull' or 'sync'
+    if action in ("pull", "sync"):
+        pull_res = run_git_cmd(
+            ["pull", "--rebase", "--autostash", remote_name, eff_branch],
+            cwd=repo_root,
+        )
+        if pull_res.returncode == 0:
+            logger.info(f"[{active_key}] Pull completed successfully.")
+        else:
+            if "couldn't find remote ref" in pull_res.stderr.lower() or "does not exist" in pull_res.stderr.lower():
+                logger.info(f"[{active_key}] Remote branch {eff_branch} will be created on push.")
+            else:
+                logger.warning(f"[{active_key}] Pull notice: {pull_res.stderr.strip() or pull_res.stdout.strip()}")
+
+    # 3. Push if action is 'push' or 'sync'
+    if action in ("push", "sync"):
+        c_res = run_git_cmd(["rev-list", "--count", f"{remote_name}/{eff_branch}..HEAD"], cwd=repo_root)
+        unpushed = int(c_res.stdout.strip()) if c_res.returncode == 0 else 0
+
+        push_res = run_git_cmd(["push", "-u", remote_name, eff_branch], cwd=repo_root)
+        if push_res.returncode == 0:
+            pushed_count = max(unpushed, 1)
+            logger.info(f"[{active_key}] Push completed successfully!")
+        else:
+            err = push_res.stderr.strip()
+            if "rejected" in err and action == "push":
+                logger.info("Push was rejected because remote has new changes. Pulling with rebase and retrying...")
+                run_git_cmd(["pull", "--rebase", "--autostash", remote_name, eff_branch], cwd=repo_root)
+                push_res2 = run_git_cmd(["push", "-u", remote_name, eff_branch], cwd=repo_root)
+                if push_res2.returncode == 0:
+                    pushed_count = max(unpushed, 1)
+                else:
+                    return {"success": False, "message": f"git push failed: {push_res2.stderr.strip()}"}
+            else:
+                return {"success": False, "message": f"git push failed: {err}"}
+
+    # 4. Reconcile history
+    reconciled = reconcile_history(repo_root=repo_root, branch=eff_branch, remote_name=remote_name)
+    if reconciled > 0:
+        logger.info(f"[{active_key}] Reconciled {reconciled} history records to (Pushed: True).")
+
+    # 5. Get fresh sync status
+    status_info = get_sync_status(config, repo_name=active_key, repo_root=repo_root)
+
+    return {
+        "success": True,
+        "message": f"Successfully synchronized with GitHub ({eff_remote_url})!",
+        "reconciled_history": reconciled,
+        "status": status_info,
     }
 
 
@@ -685,6 +921,17 @@ def main():
         help="Run interactive configuration wizard (add repos, remote URLs, author)",
     )
     parser.add_argument(
+        "--sync",
+        action="store_true",
+        help="Synchronize with GitHub (pull remote updates, push all pending commits, and reconcile history)",
+    )
+    parser.add_argument(
+        "--remote-url",
+        type=str,
+        default=None,
+        help="GitHub remote URL to connect and sync with",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Simulate the upload process without moving files or making commits",
@@ -695,6 +942,26 @@ def main():
 
     if args.setup:
         interactive_setup()
+        return
+
+    if args.sync:
+        sync_res = sync_repo(
+            config,
+            repo_name=args.repo,
+            remote_url=args.remote_url,
+        )
+        print("\n" + "=" * 65)
+        print("      GITHUB REPOSITORY SYNCHRONIZATION REPORT")
+        print("=" * 65)
+        print(f"Status   : {'[SUCCESS]' if sync_res.get('success') else '[FAILED]'}")
+        print(f"Message  : {sync_res.get('message')}")
+        if sync_res.get('status'):
+            st = sync_res['status']
+            print(f"Remote   : {st.get('remote_url')}")
+            print(f"Branch   : {st.get('branch')}")
+            print(f"Details  : {st.get('status_text')}")
+            print(f"History  : Reconciled {sync_res.get('reconciled_history', 0)} commit records to Pushed: True")
+        print("=" * 65 + "\n")
         return
 
     if args.status:

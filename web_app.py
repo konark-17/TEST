@@ -74,6 +74,13 @@ class ScheduleInstallRequest(BaseModel):
     time: str = "10:00"
 
 
+class SyncRequest(BaseModel):
+    repo: Optional[str] = None
+    remote_url: Optional[str] = None
+    branch: Optional[str] = None
+    action: str = "sync"  # "sync", "push", "pull"
+
+
 def query_scheduler_status() -> dict:
     """Check status of GitHubDailyUploader scheduled task."""
     ps_file = BASE_DIR / "setup_scheduler.ps1"
@@ -162,17 +169,41 @@ async def get_system_status():
         r = q["repo"]
         repo_counts[r] = repo_counts.get(r, 0) + 1
 
+    # Get GitHub Sync status
+    sync_status = uploader.get_sync_status(config)
+
     return {
         "config": config,
         "queue": queue_files,
         "history": list(reversed(history)),  # newest first
         "scheduler": scheduler,
+        "sync": sync_status,
         "stats": {
             "total_queued": len(queue_files),
             "total_committed": len(history),
             "repo_counts": repo_counts,
         },
     }
+
+
+@app.get("/api/sync/status")
+async def get_github_sync_status(repo: Optional[str] = None):
+    config = uploader.load_config()
+    status_info = uploader.get_sync_status(config, repo_name=repo)
+    return status_info
+
+
+@app.post("/api/sync")
+async def sync_github(req: SyncRequest):
+    config = uploader.load_config()
+    res = uploader.sync_repo(
+        config=config,
+        repo_name=req.repo,
+        remote_url=req.remote_url,
+        branch=req.branch,
+        action=req.action,
+    )
+    return res
 
 
 @app.post("/api/upload-single")
@@ -423,3 +454,4 @@ if __name__ == "__main__":
     print("  🌐 Dashboard URL: http://localhost:8000")
     print("=" * 65 + "\n")
     uvicorn.run("web_app:app", host="127.0.0.1", port=8000, reload=True)
+

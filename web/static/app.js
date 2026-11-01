@@ -96,6 +96,29 @@ function renderDashboard(data) {
     schedBadge.className = 'text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700';
   }
 
+  // GitHub Sync Status Pill in Header
+  const sync = data.sync || {};
+  const syncDot = document.getElementById('syncDot');
+  const syncText = document.getElementById('syncStatusText');
+  if (syncDot && syncText) {
+    if (!sync.configured) {
+      syncDot.className = 'w-2 h-2 rounded-full bg-slate-500';
+      syncText.innerText = 'Connect GitHub';
+    } else if (!sync.connected) {
+      syncDot.className = 'w-2 h-2 rounded-full bg-red-500 animate-pulse';
+      syncText.innerText = 'GitHub Offline';
+    } else if (sync.ahead > 0) {
+      syncDot.className = 'w-2 h-2 rounded-full bg-amber-400 animate-pulse';
+      syncText.innerText = `${sync.ahead} Unpushed (${sync.repo_name || 'main'})`;
+    } else if (sync.behind > 0) {
+      syncDot.className = 'w-2 h-2 rounded-full bg-blue-400';
+      syncText.innerText = `${sync.behind} to Pull (${sync.repo_name || 'main'})`;
+    } else {
+      syncDot.className = 'w-2 h-2 rounded-full bg-emerald-400';
+      syncText.innerText = `In Sync (${sync.repo_name || 'main'})`;
+    }
+  }
+
   // Populate Repo Selectors
   populateRepoDropdowns(cfg);
 
@@ -703,6 +726,127 @@ function switchTab(tab) {
   }
 }
 
+// GitHub Sync Functions
+function openSyncModal() {
+  const cfg = currentStatus?.config || {};
+  const repos = Object.keys(cfg.repos || {});
+  const select = document.getElementById('modalSyncRepoSelect');
+  if (select) {
+    select.innerHTML = '';
+    const opts = ['default', ...repos.filter(r => r !== 'default')];
+    opts.forEach(r => {
+      select.innerHTML += `<option value="${r}">${r}</option>`;
+    });
+  }
+
+  loadSyncModalStatus();
+  openModal('syncModal');
+}
+
+async function loadSyncModalStatus() {
+  const repo = document.getElementById('modalSyncRepoSelect')?.value || 'default';
+  const pill = document.getElementById('modalSyncStatusPill');
+  const aheadEl = document.getElementById('modalSyncAhead');
+  const behindEl = document.getElementById('modalSyncBehind');
+  const urlInput = document.getElementById('modalSyncRemoteUrl');
+  const branchInput = document.getElementById('modalSyncBranch');
+
+  pill.innerText = 'Checking...';
+  pill.className = 'text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-700 text-slate-300';
+
+  try {
+    const res = await fetch(`/api/sync/status?repo=${encodeURIComponent(repo)}`);
+    const data = await res.json();
+
+    aheadEl.innerText = data.ahead || 0;
+    behindEl.innerText = data.behind || 0;
+    if (data.remote_url) urlInput.value = data.remote_url;
+    if (data.branch) branchInput.value = data.branch;
+
+    pill.innerText = data.status_text || 'Connected';
+    if (data.badge_color === 'emerald') {
+      pill.className = 'text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+    } else if (data.badge_color === 'amber') {
+      pill.className = 'text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20';
+    } else if (data.badge_color === 'red') {
+      pill.className = 'text-xs font-semibold px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20';
+    } else {
+      pill.className = 'text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-700 text-slate-300';
+    }
+  } catch (err) {
+    pill.innerText = 'Status check failed';
+    pill.className = 'text-xs font-semibold px-2 py-0.5 rounded-full bg-red-500/10 text-red-400';
+  }
+}
+
+async function executeModalSync(action = 'sync') {
+  const repo = document.getElementById('modalSyncRepoSelect')?.value || 'default';
+  const remoteUrl = document.getElementById('modalSyncRemoteUrl')?.value.trim();
+  const branch = document.getElementById('modalSyncBranch')?.value.trim() || 'main';
+
+  const actionText = action === 'push' ? 'Pushing commits...' : action === 'pull' ? 'Pulling from GitHub...' : 'Synchronizing with GitHub...';
+  showToast(actionText, 'info');
+
+  try {
+    const res = await fetch('/api/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        repo: repo,
+        remote_url: remoteUrl,
+        branch: branch,
+        action: action,
+      }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast(data.message || 'Sync successful!', 'success');
+      loadSyncModalStatus();
+      refreshAll();
+      fetchLogs();
+    } else {
+      showToast(data.message || 'Sync failed', 'error');
+    }
+  } catch (err) {
+    showToast('Sync error: ' + err.message, 'error');
+  }
+}
+
+async function triggerQuickSync() {
+  const syncIcon = document.getElementById('syncIcon');
+  if (syncIcon) syncIcon.classList.add('animate-spin');
+  showToast('Synchronizing with GitHub...', 'info');
+
+  try {
+    const res = await fetch('/api/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'sync' }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast(data.message || 'Sync complete!', 'success');
+      refreshAll();
+      fetchLogs();
+    } else {
+      showToast(data.message || 'Sync failed', 'error');
+    }
+  } catch (err) {
+    showToast('Failed to sync: ' + err.message, 'error');
+  } finally {
+    if (syncIcon) setTimeout(() => syncIcon.classList.remove('animate-spin'), 600);
+  }
+}
+
+function testSyncRemoteUrl() {
+  const url = document.getElementById('modalSyncRemoteUrl')?.value.trim();
+  if (!url) {
+    alert('Please enter a GitHub repository remote URL.');
+    return;
+  }
+  testRemoteUrl(url);
+}
+
 // Modal Helpers
 function openModal(id) {
   document.getElementById(id).classList.remove('hidden');
@@ -712,3 +856,4 @@ function openModal(id) {
 function closeModal(id) {
   document.getElementById(id).classList.add('hidden');
 }
+

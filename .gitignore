@@ -3,10 +3,15 @@ __pycache__/
 *.pyc
 *.pyo
 
-# Logs
+# Logs & History
 logs/
 *.log
 upload_history.json
+
+# Uploader Workspace Data
+queue/
+uploads/
+repos/
 
 # Temp & OS
 .DS_Store

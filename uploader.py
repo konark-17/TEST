@@ -162,8 +162,8 @@ def resolve_repo_context(
     elif selected_key in ("TEST", "leetcode") or not merged.get("remote_url"):
         repo_root = BASE_DIR
     else:
-        # Isolated local git repository for distinct GitHub remotes (prevents overwriting BASE_DIR remote)
-        repo_root = (BASE_DIR / "repos" / selected_key).resolve()
+        # Isolated local git repository outside BASE_DIR so it never inherits or overwrites BASE_DIR's .git
+        repo_root = (BASE_DIR.parent / ".uploader_repos" / selected_key).resolve()
 
     # Fallback to local git remote URL if not specified in config
     if not merged.get("remote_url"):
@@ -180,10 +180,10 @@ def ensure_git_setup(config: dict, repo_root: Path = BASE_DIR) -> None:
     if not repo_root.exists():
         repo_root.mkdir(parents=True, exist_ok=True)
 
-    # Check if inside git repo
-    res = run_git_cmd(["rev-parse", "--is-inside-work-tree"], cwd=repo_root)
-    if res.returncode != 0:
-        logger.info(f"Initializing new git repository in: {repo_root}")
+    # Check if this specific directory has its own .git (do NOT rely on rev-parse climbing parent directories)
+    git_dir = repo_root / ".git"
+    if not git_dir.exists():
+        logger.info(f"Initializing new isolated git repository in: {repo_root}")
         run_git_cmd(["init", "-b", config.get("branch", "main")], cwd=repo_root)
 
     # Configure local git user identity so GitHub links commits properly

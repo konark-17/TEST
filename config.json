@@ -37,7 +37,7 @@
       "remote_url": "https://github.com/konark-17/Panchang-App.git",
       "branch": "main",
       "target_dir": "uploads/Panchang-App",
-      "description": "Hindu Panchang Calendar with daily Tithi, Paksha & smart reminders. Built with Go + React. PWA \u2014 installable on any device. Free deployment on Render + Vercel."
+      "description": "Hindu Panchang Calendar with daily Tithi, Paksha & smart reminders. Built with Go + React. PWA — installable on any device. Free deployment on Render + Vercel."
     },
     "AI2Sim": {
       "remote_url": "https://github.com/konark-17/AI2Sim.git",
@@ -56,6 +56,12 @@
       "branch": "main",
       "target_dir": "uploads/Map-Related-Contest",
       "description": ""
+    },
+    "ZeroLOB": {
+      "remote_url": "https://github.com/konark-17/ZeroLOB.git",
+      "branch": "main",
+      "repo_path": "C:/Users/KONARK/OneDrive/Desktop/project/.uploader_repos/ZeroLOB",
+      "description": "A deterministic, lock-free Limit Order Book (LOB) matching engine engineered in pure Go to achieve sub-microsecond execution ( ≈ 266 ns) and over 2.4 M ops/sec. Built with a zero-allocation contiguous memory arena and cache-line padded SPSC ring buffers to completely eliminate Go runtime garbage collection (GC) jitter."
     }
   }
 }

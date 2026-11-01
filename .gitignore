@@ -6,6 +6,7 @@ __pycache__/
 # Logs
 logs/
 *.log
+upload_history.json
 
 # Temp & OS
 .DS_Store

@@ -14,13 +14,50 @@
   "repos": {
     "TEST": {
       "remote_url": "https://github.com/konark-17/TEST.git",
+      "branch": "main",
       "target_dir": "uploads/TEST",
-      "branch": "main"
+      "description": ""
     },
     "leetcode": {
       "remote_url": "https://github.com/konark-17/TEST.git",
       "target_dir": "uploads/leetcode",
       "branch": "main"
+    },
+    "NetSentinel-AI": {
+      "remote_url": "https://github.com/konark-17/NetSentinel-AI.git",
+      "branch": "main",
+      "target_dir": "uploads/NetSentinel-AI",
+      "description": ""
+    },
+    "RoutePulse": {
+      "remote_url": "https://github.com/konark-17/RoutePulse.git",
+      "branch": "main",
+      "target_dir": "uploads/RoutePulse",
+      "description": "High-performance Delivery Route Optimization Engine for grocery logistics using TSP (Nearest Neighbor + 2-Opt), OpenStreetMap geocoding, .and FastAPI. Reduces travel distance by ~25%"
+    },
+    "202401096_IT-314_Lab_01": {
+      "remote_url": "https://github.com/konark-17/202401096_IT-314_Lab_01.git",
+      "branch": "main",
+      "target_dir": "uploads/202401096_IT-314_Lab_01",
+      "description": ""
+    },
+    "Panchang-App": {
+      "remote_url": "https://github.com/konark-17/Panchang-App.git",
+      "branch": "main",
+      "target_dir": "uploads/Panchang-App",
+      "description": "Hindu Panchang Calendar with daily Tithi, Paksha & smart reminders. Built with Go + React. PWA \u2014 installable on any device. Free deployment on Render + Vercel."
+    },
+    "AI2Sim": {
+      "remote_url": "https://github.com/konark-17/AI2Sim.git",
+      "branch": "main",
+      "target_dir": "uploads/AI2Sim",
+      "description": ""
+    },
+    "Map-Related-Contest": {
+      "remote_url": "https://github.com/konark-17/Map-Related-Contest.git",
+      "branch": "main",
+      "target_dir": "uploads/Map-Related-Contest",
+      "description": ""
     }
   }
 }

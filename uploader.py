@@ -433,6 +433,77 @@ def upload_single_file(
     }
 
 
+def sync_all_github_repos(config: dict, username: str = None, token: str = None) -> dict:
+    """
+    Fetch all repositories from the user's GitHub account and register them into config.json.
+    Also creates queue subfolders for each repository so files can be dropped immediately.
+    """
+    import urllib.request
+    user = (username or config.get("git_user_name", "konark-17")).strip()
+    headers = {"User-Agent": "GitFlow-Uploader/1.0"}
+    if token:
+        headers["Authorization"] = f"Bearer {token.strip()}"
+        url = "https://api.github.com/user/repos?per_page=100&sort=updated"
+    else:
+        url = f"https://api.github.com/users/{user}/repos?per_page=100&sort=updated"
+
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=10) as response:
+            repos_data = json.loads(response.read().decode())
+    except Exception as e:
+        logger.error(f"Failed to fetch repos from GitHub for {user}: {e}")
+        return {"success": False, "message": f"GitHub request failed: {e}"}
+
+    repos = config.get("repos", {})
+    queue_dir = BASE_DIR / config.get("queue_dir", "queue")
+    queue_dir.mkdir(parents=True, exist_ok=True)
+
+    added = []
+    updated = []
+
+    for r in repos_data:
+        name = r.get("name")
+        clone_url = r.get("clone_url")
+        branch = r.get("default_branch", "main")
+        target_dir = f"uploads/{name}"
+
+        is_new = name not in repos
+        repos[name] = {
+            "remote_url": clone_url,
+            "branch": branch,
+            "target_dir": target_dir,
+            "description": r.get("description") or "",
+        }
+
+        # Create queue subfolder for this repo
+        (queue_dir / name).mkdir(parents=True, exist_ok=True)
+
+        if is_new:
+            added.append(name)
+        else:
+            updated.append(name)
+
+    config["repos"] = repos
+    save_config(config)
+
+    logger.info(
+        f"Synced {len(repos_data)} repositories from GitHub account '{user}' "
+        f"({len(added)} new, {len(updated)} updated)."
+    )
+
+    return {
+        "success": True,
+        "username": user,
+        "total_account_repos": len(repos_data),
+        "added_count": len(added),
+        "updated_count": len(updated),
+        "added_repos": added,
+        "all_repos": list(repos.keys()),
+        "message": f"Successfully synced {len(repos_data)} repositories from GitHub account '{user}'!",
+    }
+
+
 def reconcile_history(repo_root: Path = BASE_DIR, branch: str = "main", remote_name: str = "origin") -> int:
     """
     Checks each commit in upload_history.json. If it is already merged into the remote branch,
@@ -932,6 +1003,18 @@ def main():
         help="GitHub remote URL to connect and sync with",
     )
     parser.add_argument(
+        "--sync-all-github",
+        nargs="?",
+        const="DEFAULT",
+        help="Fetch and register ALL repositories from your GitHub account (e.g. --sync-all-github konark-17)",
+    )
+    parser.add_argument(
+        "--github-token",
+        type=str,
+        default=None,
+        help="Optional GitHub Personal Access Token to include private repositories",
+    )
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Simulate the upload process without moving files or making commits",
@@ -942,6 +1025,22 @@ def main():
 
     if args.setup:
         interactive_setup()
+        return
+
+    if args.sync_all_github:
+        user = None if args.sync_all_github == "DEFAULT" else args.sync_all_github
+        res = sync_all_github_repos(config, username=user, token=args.github_token)
+        print("\n" + "=" * 65)
+        print("      GITHUB ACCOUNT REPOSITORIES SYNC REPORT")
+        print("=" * 65)
+        print(f"Status   : {'[SUCCESS]' if res.get('success') else '[FAILED]'}")
+        print(f"User     : {res.get('username')}")
+        print(f"Total    : {res.get('total_account_repos', 0)} repositories found on GitHub")
+        print(f"New      : {res.get('added_count', 0)} added to Target Options")
+        print(f"Updated  : {res.get('updated_count', 0)} refreshed")
+        if res.get('added_repos'):
+            print(f"Added    : {', '.join(res['added_repos'])}")
+        print("=" * 65 + "\n")
         return
 
     if args.sync:

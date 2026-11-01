@@ -70,6 +70,13 @@ class TestWebApp(unittest.TestCase):
         repo_names = [r["name"] for r in data["repos"]]
         self.assertIn("TEST", repo_names)
 
+    def test_sync_all_github_repos_endpoint(self):
+        response = client.post("/api/github/sync-all-repos", json={"username": "konark-17"})
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["success"])
+        self.assertGreaterEqual(data["total_account_repos"], 1)
+
     def test_local_detected_repos_endpoint(self):
         response = client.get("/api/repos/local-detected")
         self.assertEqual(response.status_code, 200)

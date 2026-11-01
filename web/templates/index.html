@@ -65,6 +65,12 @@
           <span id="syncStatusText" class="font-medium text-slate-300">Checking GitHub...</span>
         </button>
 
+        <!-- Sync All Repos Button -->
+        <button onclick="syncAllAccountRepos()" class="hidden md:flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-purple-500/10 to-indigo-500/10 hover:from-purple-500/20 hover:to-indigo-500/20 text-purple-300 border border-purple-500/30 text-xs font-semibold transition" title="Sync all repos from GitHub account">
+          <i data-lucide="sparkles" class="w-3.5 h-3.5 text-amber-400"></i>
+          <span>Sync All Repos</span>
+        </button>
+
         <!-- Quick Sync Button -->
         <button onclick="triggerQuickSync()" class="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition" title="Sync with GitHub Now">
           <i data-lucide="refresh-cw" id="syncIcon" class="w-4 h-4 text-sky-400"></i>
@@ -506,6 +512,21 @@
 
       <!-- Tab 1: My GitHub Repos -->
       <div id="repoModalContentGithub" class="space-y-3">
+        <!-- Banner: Sync All Repos at once -->
+        <div class="p-3.5 rounded-xl bg-gradient-to-r from-purple-900/40 via-indigo-900/30 to-purple-900/40 border border-purple-500/30 flex items-center justify-between">
+          <div>
+            <h4 class="text-xs font-bold text-white flex items-center space-x-1.5">
+              <i data-lucide="sparkles" class="w-3.5 h-3.5 text-amber-400"></i>
+              <span>Sync All Repositories From Account</span>
+            </h4>
+            <p class="text-[11px] text-slate-300 mt-0.5">Import all repositories from your GitHub account at once</p>
+          </div>
+          <button onclick="syncAllAccountRepos()" id="btnSyncAllRepos" class="px-3.5 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs shadow-lg shadow-purple-500/20 transition flex items-center space-x-1.5 shrink-0">
+            <i data-lucide="cloud-download" class="w-4 h-4"></i>
+            <span>Sync All Repos</span>
+          </button>
+        </div>
+
         <div class="flex items-center space-x-2">
           <div class="relative flex-1">
             <i data-lucide="user" class="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5"></i>
@@ -517,7 +538,7 @@
           </button>
         </div>
 
-        <div id="githubReposList" class="max-h-[260px] overflow-y-auto space-y-2 pr-1 divide-y divide-slate-800">
+        <div id="githubReposList" class="max-h-[220px] overflow-y-auto space-y-2 pr-1 divide-y divide-slate-800">
           <div class="py-8 text-center text-xs text-slate-400">Loading your GitHub repositories...</div>
         </div>
       </div>

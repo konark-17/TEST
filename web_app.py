@@ -81,6 +81,11 @@ class SyncRequest(BaseModel):
     action: str = "sync"  # "sync", "push", "pull"
 
 
+class SyncAllReposRequest(BaseModel):
+    username: Optional[str] = None
+    token: Optional[str] = None
+
+
 def query_scheduler_status() -> dict:
     """Check status of GitHubDailyUploader scheduled task."""
     ps_file = BASE_DIR / "setup_scheduler.ps1"
@@ -305,6 +310,15 @@ async def update_config(req: ConfigUpdateRequest):
     uploader.save_config(config)
     uploader.ensure_git_setup(config)
     return {"success": True, "config": config}
+
+
+@app.post("/api/github/sync-all-repos")
+async def sync_all_github_repos_endpoint(req: Optional[SyncAllReposRequest] = None):
+    config = uploader.load_config()
+    username = req.username if req else None
+    token = req.token if req else None
+    res = uploader.sync_all_github_repos(config, username=username, token=token)
+    return res
 
 
 @app.get("/api/github/user-repos")

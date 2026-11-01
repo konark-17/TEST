@@ -659,6 +659,35 @@ async function fetchGitHubReposList() {
   }
 }
 
+async function syncAllAccountRepos() {
+  const user = document.getElementById('githubFetchUser')?.value.trim() || currentStatus?.config?.git_user_name || 'konark-17';
+  showToast(`Syncing all repositories for @${user} from GitHub...`, 'info');
+
+  const btn = document.getElementById('btnSyncAllRepos');
+  if (btn) btn.innerHTML = `<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i><span>Syncing...</span>`;
+
+  try {
+    const res = await fetch('/api/github/sync-all-repos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: user }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast(`Synced ${data.total_account_repos} repositories from @${user}! (${data.added_count} new added)`, 'success');
+      await refreshAll();
+      fetchGitHubReposList();
+    } else {
+      showToast(data.message || 'Failed to sync account repositories', 'error');
+    }
+  } catch (err) {
+    showToast('Error syncing account: ' + err.message, 'error');
+  } finally {
+    if (btn) btn.innerHTML = `<i data-lucide="cloud-download" class="w-4 h-4"></i><span>Sync All Repos</span>`;
+    lucide.createIcons();
+  }
+}
+
 async function fetchLocalReposList() {
   const listEl = document.getElementById('localReposList');
   listEl.innerHTML = `<div class="py-8 text-center text-xs text-slate-400">Detecting local Git folders...</div>`;

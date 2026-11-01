@@ -147,7 +147,7 @@ function renderDashboard(data) {
 // Populate Repo Dropdowns across the page
 function populateRepoDropdowns(cfg) {
   const repos = Object.keys(cfg.repos || {});
-  const options = ['default', ...repos.filter(r => r !== 'default')];
+  const options = repos.length > 0 ? repos : ['default'];
 
   const updateSelect = (selectId, includeAll = false) => {
     const el = document.getElementById(selectId);
@@ -158,7 +158,12 @@ function populateRepoDropdowns(cfg) {
       el.innerHTML += `<option value="ALL">All Repositories</option>`;
     }
     options.forEach(r => {
-      el.innerHTML += `<option value="${r}">${r}</option>`;
+      const repoData = (cfg.repos || {})[r] || {};
+      const remote = repoData.remote_url || (r === 'default' ? cfg.remote_url : '');
+      const label = remote
+        ? `${r} (${remote.replace('https://github.com/', '').replace('.git', '')})`
+        : r;
+      el.innerHTML += `<option value="${r}">${label}</option>`;
     });
     if (currVal && [...el.options].some(o => o.value === currVal)) {
       el.value = currVal;
@@ -168,6 +173,7 @@ function populateRepoDropdowns(cfg) {
   updateSelect('dropzoneRepoSelect', false);
   updateSelect('singleUploadRepo', false);
   updateSelect('queueFilterRepo', true);
+  updateSelect('modalSyncRepoSelect', false);
 }
 
 // Render Repositories List
@@ -564,12 +570,204 @@ async function runSchedulerNow() {
 
 // Repositories Management
 function openAddRepoModal() {
-  document.getElementById('repoModalName').value = '';
-  document.getElementById('repoModalUrl').value = '';
-  document.getElementById('repoModalBranch').value = 'main';
-  document.getElementById('repoModalTargetDir').value = 'uploads';
-  document.getElementById('repoModalPath').value = '';
+  const cfg = currentStatus?.config || {};
+  const user = cfg.git_user_name || 'konark-17';
+  const userInput = document.getElementById('githubFetchUser');
+  if (userInput) userInput.value = user;
+
+  switchRepoModalTab('github');
+  fetchGitHubReposList();
   openModal('repoModal');
+}
+
+function switchRepoModalTab(tab) {
+  const tabs = ['github', 'local', 'custom'];
+  tabs.forEach(t => {
+    const btn = document.getElementById(`repoTab${t.charAt(0).toUpperCase() + t.slice(1)}`);
+    const content = document.getElementById(`repoModalContent${t.charAt(0).toUpperCase() + t.slice(1)}`);
+    if (t === tab) {
+      if (btn) {
+        btn.className = 'flex-1 pb-2.5 text-xs font-semibold text-purple-400 border-b-2 border-purple-400 transition flex items-center justify-center space-x-1.5';
+      }
+      if (content) content.classList.remove('hidden');
+    } else {
+      if (btn) {
+        btn.className = 'flex-1 pb-2.5 text-xs font-semibold text-slate-400 hover:text-slate-200 transition flex items-center justify-center space-x-1.5';
+      }
+      if (content) content.classList.add('hidden');
+    }
+  });
+
+  if (tab === 'local') {
+    fetchLocalReposList();
+  }
+}
+
+async function fetchGitHubReposList() {
+  const listEl = document.getElementById('githubReposList');
+  const user = document.getElementById('githubFetchUser')?.value.trim() || 'konark-17';
+  const icon = document.getElementById('fetchReposIcon');
+  if (icon) icon.classList.add('animate-spin');
+
+  listEl.innerHTML = `<div class="py-8 text-center text-xs text-slate-400">Fetching repositories for <b>${user}</b> from GitHub...</div>`;
+
+  try {
+    const res = await fetch(`/api/github/user-repos?username=${encodeURIComponent(user)}`);
+    const data = await res.json();
+    listEl.innerHTML = '';
+
+    if (!data.success || !data.repos || data.repos.length === 0) {
+      listEl.innerHTML = `
+        <div class="py-6 text-center text-xs text-slate-400">
+          No public repositories found for '${user}' or rate limited.<br>
+          <span class="text-slate-500">You can also add a repo manually in the "Custom URL" tab.</span>
+        </div>
+      `;
+      return;
+    }
+
+    data.repos.forEach(repo => {
+      const item = document.createElement('div');
+      item.className = 'py-2.5 px-2 flex items-center justify-between hover:bg-slate-800/40 rounded-lg transition';
+      const isAdded = repo.is_added;
+
+      item.innerHTML = `
+        <div class="min-w-0 flex-1 pr-3">
+          <div class="flex items-center space-x-2">
+            <span class="font-bold text-xs text-white truncate font-mono">${repo.name}</span>
+            <span class="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400 border border-slate-700">${repo.default_branch || 'main'}</span>
+            ${repo.is_private ? '<span class="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-300">Private</span>' : ''}
+          </div>
+          ${repo.description ? `<p class="text-[11px] text-slate-400 truncate mt-0.5">${repo.description}</p>` : ''}
+        </div>
+        <div>
+          ${isAdded
+            ? '<button disabled class="px-2.5 py-1 text-xs rounded bg-slate-800/80 text-emerald-400 border border-emerald-500/20 font-semibold cursor-default">✓ Added</button>'
+            : `<button onclick="quickAddGitHubRepo('${repo.name}', '${repo.clone_url}', '${repo.default_branch || 'main'}')" class="px-2.5 py-1 text-xs rounded bg-purple-600 hover:bg-purple-500 text-white font-semibold transition shadow-sm">
+                 + Add to Options
+               </button>`
+          }
+        </div>
+      `;
+      listEl.appendChild(item);
+    });
+  } catch (err) {
+    listEl.innerHTML = `<div class="py-6 text-center text-xs text-red-400">Failed to fetch GitHub repos: ${err.message}</div>`;
+  } finally {
+    if (icon) setTimeout(() => icon.classList.remove('animate-spin'), 500);
+    lucide.createIcons();
+  }
+}
+
+async function fetchLocalReposList() {
+  const listEl = document.getElementById('localReposList');
+  listEl.innerHTML = `<div class="py-8 text-center text-xs text-slate-400">Detecting local Git folders...</div>`;
+
+  try {
+    const res = await fetch('/api/repos/local-detected');
+    const data = await res.json();
+    listEl.innerHTML = '';
+
+    if (!data.success || !data.local_repos || data.local_repos.length === 0) {
+      listEl.innerHTML = `<div class="py-6 text-center text-xs text-slate-400">No other Git repositories detected in workspace directory.</div>`;
+      return;
+    }
+
+    data.local_repos.forEach(lr => {
+      const item = document.createElement('div');
+      item.className = 'py-2.5 px-2 flex items-center justify-between hover:bg-slate-800/40 rounded-lg transition';
+      const isAdded = lr.is_added;
+
+      item.innerHTML = `
+        <div class="min-w-0 flex-1 pr-3">
+          <div class="flex items-center space-x-2">
+            <span class="font-bold text-xs text-white truncate font-mono">${lr.name}</span>
+            <span class="text-[10px] px-1.5 py-0.2 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20">${lr.branch}</span>
+          </div>
+          <p class="text-[11px] text-slate-400 truncate mt-0.5">${lr.remote_url || lr.path}</p>
+        </div>
+        <div>
+          ${isAdded
+            ? '<button disabled class="px-2.5 py-1 text-xs rounded bg-slate-800/80 text-emerald-400 border border-emerald-500/20 font-semibold cursor-default">✓ Linked</button>'
+            : `<button onclick="quickAddLocalRepo('${lr.name}', '${lr.path.replace(/\\/g, '/')}', '${lr.remote_url}', '${lr.branch}')" class="px-2.5 py-1 text-xs rounded bg-purple-600 hover:bg-purple-500 text-white font-semibold transition shadow-sm">
+                 + Link Project
+               </button>`
+          }
+        </div>
+      `;
+      listEl.appendChild(item);
+    });
+  } catch (err) {
+    listEl.innerHTML = `<div class="py-6 text-center text-xs text-red-400">Failed to detect local repos: ${err.message}</div>`;
+  } finally {
+    lucide.createIcons();
+  }
+}
+
+async function quickAddGitHubRepo(name, cloneUrl, branch = 'main') {
+  showToast(`Adding '${name}' to Target Repositories...`, 'info');
+
+  try {
+    const res = await fetch('/api/repos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: name,
+        remote_url: cloneUrl,
+        branch: branch,
+        target_dir: `uploads/${name}`,
+      }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast(`Repository '${name}' added to Target Options!`, 'success');
+      closeModal('repoModal');
+      await refreshAll();
+
+      // Auto-select this newly added repo in dropdowns
+      const dropSelect = document.getElementById('dropzoneRepoSelect');
+      const singleSelect = document.getElementById('singleUploadRepo');
+      if (dropSelect) dropSelect.value = name;
+      if (singleSelect) singleSelect.value = name;
+    } else {
+      showToast('Failed to add repo: ' + (data.message || 'Error'), 'error');
+    }
+  } catch (err) {
+    showToast('Error adding repo: ' + err.message, 'error');
+  }
+}
+
+async function quickAddLocalRepo(name, path, remoteUrl = '', branch = 'main') {
+  showToast(`Linking '${name}'...`, 'info');
+
+  try {
+    const res = await fetch('/api/repos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: name,
+        repo_path: path,
+        remote_url: remoteUrl,
+        branch: branch,
+        target_dir: 'uploads',
+      }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast(`Linked local repository '${name}'!`, 'success');
+      closeModal('repoModal');
+      await refreshAll();
+
+      const dropSelect = document.getElementById('dropzoneRepoSelect');
+      const singleSelect = document.getElementById('singleUploadRepo');
+      if (dropSelect) dropSelect.value = name;
+      if (singleSelect) singleSelect.value = name;
+    } else {
+      showToast('Failed to link repo', 'error');
+    }
+  } catch (err) {
+    showToast('Error linking repo: ' + err.message, 'error');
+  }
 }
 
 async function saveRepoProfile() {

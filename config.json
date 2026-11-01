@@ -12,6 +12,11 @@
   "order": "alphabetical",
   "default_repo": "default",
   "repos": {
+    "TEST": {
+      "remote_url": "https://github.com/konark-17/TEST.git",
+      "target_dir": "uploads/TEST",
+      "branch": "main"
+    },
     "leetcode": {
       "remote_url": "https://github.com/konark-17/TEST.git",
       "target_dir": "uploads/leetcode",

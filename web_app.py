@@ -307,6 +307,64 @@ async def update_config(req: ConfigUpdateRequest):
     return {"success": True, "config": config}
 
 
+@app.get("/api/github/user-repos")
+async def get_github_user_repos(username: Optional[str] = None):
+    """Fetch public repositories from GitHub for the user."""
+    import urllib.request
+    config = uploader.load_config()
+    user = (username or config.get("git_user_name", "konark-17")).strip()
+    url = f"https://api.github.com/users/{user}/repos?per_page=100&sort=updated"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "GitFlow-Uploader/1.0"})
+        with urllib.request.urlopen(req, timeout=8) as response:
+            repos_data = json.loads(response.read().decode())
+
+        configured_repos = config.get("repos", {})
+        result = []
+        for r in repos_data:
+            name = r.get("name")
+            is_added = (name in configured_repos) or (config.get("remote_url", "").endswith(f"/{name}.git") or config.get("remote_url", "").endswith(f"/{name}"))
+            result.append({
+                "name": name,
+                "full_name": r.get("full_name"),
+                "clone_url": r.get("clone_url"),
+                "html_url": r.get("html_url"),
+                "description": r.get("description") or "",
+                "default_branch": r.get("default_branch", "main"),
+                "is_private": r.get("private", False),
+                "is_added": is_added,
+            })
+        return {"success": True, "username": user, "repos": result}
+    except Exception as e:
+        logger.warning(f"Failed to fetch GitHub repos for {user}: {e}")
+        return {"success": False, "username": user, "error": str(e), "repos": []}
+
+
+@app.get("/api/repos/local-detected")
+async def get_local_detected_repos():
+    """Detect local git repositories in the parent workspace directory."""
+    config = uploader.load_config()
+    configured_repos = config.get("repos", {})
+    parent_dir = BASE_DIR.parent
+    detected = []
+    if parent_dir.exists():
+        for p in parent_dir.iterdir():
+            if p.is_dir() and (p / ".git").exists() and p != BASE_DIR:
+                res = uploader.run_git_cmd(["remote", "get-url", "origin"], cwd=p)
+                remote_url = res.stdout.strip() if res.returncode == 0 else ""
+                res_b = uploader.run_git_cmd(["branch", "--show-current"], cwd=p)
+                branch = res_b.stdout.strip() or "main" if res_b.returncode == 0 else "main"
+                is_added = any(r.get("repo_path") == str(p) or k == p.name for k, r in configured_repos.items())
+                detected.append({
+                    "name": p.name,
+                    "path": str(p),
+                    "remote_url": remote_url,
+                    "branch": branch,
+                    "is_added": is_added,
+                })
+    return {"success": True, "local_repos": detected}
+
+
 @app.post("/api/repos")
 async def add_or_update_repo(req: RepoProfileRequest):
     config = uploader.load_config()
@@ -315,7 +373,7 @@ async def add_or_update_repo(req: RepoProfileRequest):
     entry = {
         "remote_url": req.remote_url or "",
         "branch": req.branch or "main",
-        "target_dir": req.target_dir or "uploads",
+        "target_dir": req.target_dir or f"uploads/{req.name}",
     }
     if req.repo_path:
         entry["repo_path"] = req.repo_path
@@ -323,6 +381,10 @@ async def add_or_update_repo(req: RepoProfileRequest):
     repos[req.name] = entry
     config["repos"] = repos
     uploader.save_config(config)
+
+    # Ensure queue directory for this repo exists
+    queue_dir = BASE_DIR / config.get("queue_dir", "queue")
+    (queue_dir / req.name).mkdir(parents=True, exist_ok=True)
 
     # Initialize / update git setup for this repo
     merged, _, root = uploader.resolve_repo_context(config, repo_name=req.name)

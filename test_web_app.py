@@ -61,6 +61,39 @@ class TestWebApp(unittest.TestCase):
         self.assertIn("behind", data)
         self.assertIn("status_text", data)
 
+    def test_github_user_repos_endpoint(self):
+        response = client.get("/api/github/user-repos?username=konark-17")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["success"])
+        self.assertIn("repos", data)
+        repo_names = [r["name"] for r in data["repos"]]
+        self.assertIn("TEST", repo_names)
+
+    def test_local_detected_repos_endpoint(self):
+        response = client.get("/api/repos/local-detected")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["success"])
+        self.assertIn("local_repos", data)
+
+    def test_add_and_delete_repo(self):
+        # Add a repo
+        payload = {
+            "name": "sample_test_repo",
+            "remote_url": "https://github.com/konark-17/TEST.git",
+            "branch": "main",
+            "target_dir": "uploads/sample_test_repo"
+        }
+        res_add = client.post("/api/repos", json=payload)
+        self.assertEqual(res_add.status_code, 200)
+        self.assertTrue(res_add.json()["success"])
+
+        # Delete the repo
+        res_del = client.delete("/api/repos/sample_test_repo")
+        self.assertEqual(res_del.status_code, 200)
+        self.assertTrue(res_del.json()["success"])
+
 
 if __name__ == "__main__":
     unittest.main()

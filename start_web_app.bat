@@ -12,4 +12,3 @@ start "" cmd /c "timeout /t 2 /nobreak >nul & start http://localhost:8000"
 :: Start Uvicorn web server
 python -m uvicorn web_app:app --host 127.0.0.1 --port 8000 --reload
 pause
-

@@ -133,3 +133,4 @@ switch ($Action.ToLower()) {
         Write-Host "Unknown action: $Action. Valid actions: install, run, status, remove, menu"
     }
 }
+

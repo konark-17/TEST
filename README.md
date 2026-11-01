@@ -84,17 +84,63 @@ This uses Git's `GIT_AUTHOR_DATE` and `GIT_COMMITTER_DATE` to legitimately backd
 
 ---
 
+## 🔥 Multi-Repo & Repo-Wise Support
+
+You can configure the uploader to target **a single repository**, **multiple named repositories**, or **any local git folder**:
+
+### Method 1: Subfolder Auto-Routing (Recommended)
+Place files in `queue/` grouped by repository name:
+```
+queue/
+├── leetcode/
+│   ├── problem_01.py
+│   └── problem_02.py
+└── networking/
+    ├── packet_parser.go
+    └── tcp_client.c
+```
+In `config.json`:
+```json
+{
+  "repos": {
+    "leetcode": {
+      "remote_url": "https://github.com/konark-17/leetcode-solutions.git",
+      "target_dir": "uploads/leetcode"
+    },
+    "networking": {
+      "remote_url": "https://github.com/konark-17/networking-projects.git",
+      "target_dir": "uploads/networking"
+    }
+  }
+}
+```
+The uploader automatically detects the folder name (`leetcode`, `networking`) and commits to the corresponding repository!
+
+### Method 2: Target a Specific Repo via CLI
+```powershell
+python uploader.py --repo leetcode
+```
+
+### Method 3: Target Any Local Git Repository on Your Disk
+```powershell
+python uploader.py --repo-dir "c:\Users\KONARK\OneDrive\Desktop\project\Low Latency"
+```
+
+---
+
 ## 💻 CLI Commands & Options
 
 | Command | Description |
 |---|---|
 | `python uploader.py` | Upload next 1 file from queue right now |
+| `python uploader.py --repo <name>` | Upload next file for a specific configured repository profile |
+| `python uploader.py --repo-dir <path>` | Target any local git repository on your machine |
 | `python uploader.py --dry-run` | Preview what file would be uploaded without changing anything |
-| `python uploader.py --status` | View queue files, total committed, and git settings |
+| `python uploader.py --status` | View queue breakdown per repo, total committed, and git settings |
 | `python uploader.py --count 3` | Upload 3 files one by one with 3 separate commits |
 | `python uploader.py --spread --days-back 14` | Commit queued files backdated across the past 14 days |
 | `python uploader.py --schedule 10:00` | Run continuously in terminal, uploading daily at 10:00 |
-| `python uploader.py --setup` | Run interactive CLI setup wizard |
+| `python uploader.py --setup` | Run interactive CLI setup wizard (add repos, URLs, author) |
 
 ---
 
@@ -114,3 +160,4 @@ Automated Github uploader/
 ├── upload_history.json      # Record of all uploaded files & commit hashes
 └── test_uploader.py         # Unit & integration tests
 ```
+

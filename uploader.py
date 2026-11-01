@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """
-Automated GitHub File Uploader
-==============================
+Automated GitHub File Uploader (Single-Repo & Multi-Repo Wise)
+============================================================
 Automates committing and uploading files to GitHub one-by-one to maintain
 a consistent commit streak / activity on GitHub.
 
 Key features:
+- Repo-Wise Support: Upload to a single repository OR route across multiple repositories!
+- Automatic folder-based routing: Drop files in `queue/<repo_name>/` to automatically target that repo.
+- Target any local git repository on your machine using `--repo-dir`.
 - Uploads 1 file per trigger/run (or N files with individual commits).
-- Moves files safely from `queue/` to `uploads/`.
-- Configurable commit messages, git author name, email, and branch.
+- Moves files safely from `queue/` to target directories.
 - Backdating / Spread mode: Spreads commits across past days (1 commit/day).
 - Daily scheduler (in-process daemon or Windows Task Scheduler integration).
 - Complete history and status logging.
@@ -57,6 +59,8 @@ DEFAULT_CONFIG = {
     "auto_push": True,
     "schedule_time": "10:00",
     "order": "alphabetical",  # "alphabetical", "oldest", "newest"
+    "default_repo": "default",
+    "repos": {}
 }
 
 
@@ -102,7 +106,7 @@ def record_history(entry: dict) -> None:
 
 
 def run_git_cmd(args: list, cwd: Path = None, env: dict = None) -> subprocess.CompletedProcess:
-    """Run a git command in the repository."""
+    """Run a git command in the target repository directory."""
     target_cwd = cwd if cwd is not None else BASE_DIR
     cmd_env = os.environ.copy()
     if env:
@@ -117,37 +121,89 @@ def run_git_cmd(args: list, cwd: Path = None, env: dict = None) -> subprocess.Co
     )
 
 
-def ensure_git_setup(config: dict) -> None:
-    """Ensure local repository has git initialized and identity set."""
+def resolve_repo_context(
+    config: dict,
+    repo_name: str = None,
+    rel_file: Path = None,
+    override_repo_dir: str = None,
+) -> tuple[dict, str, Path]:
+    """
+    Resolve which repository configuration to use.
+    Supports single-repo, multi-repo profiles, and direct local repo folders.
+    Returns: (merged_config, repo_key, repo_root_path)
+    """
+    repos = config.get("repos", {})
+
+    # If direct repo dir is overridden via CLI
+    if override_repo_dir:
+        repo_root = Path(override_repo_dir).resolve()
+        merged = config.copy()
+        merged["repo_path"] = str(repo_root)
+        merged["active_repo_key"] = repo_root.name
+        return merged, repo_root.name, repo_root
+
+    selected_key = repo_name
+
+    # If repo_name not given, check if file is nested inside queue/<repo_name>/...
+    if not selected_key and rel_file and repos:
+        first_segment = rel_file.parts[0] if len(rel_file.parts) > 1 else None
+        if first_segment and first_segment in repos:
+            selected_key = first_segment
+
+    if not selected_key:
+        selected_key = config.get("default_repo", "default")
+
+    repo_conf = {}
+    if repos and selected_key in repos:
+        repo_conf = repos[selected_key].copy()
+
+    merged = config.copy()
+    merged.update(repo_conf)
+    merged["active_repo_key"] = selected_key
+
+    # Resolve local git root directory
+    if merged.get("repo_path"):
+        repo_root = Path(merged["repo_path"]).resolve()
+    else:
+        repo_root = BASE_DIR
+
+    return merged, selected_key, repo_root
+
+
+def ensure_git_setup(config: dict, repo_root: Path = BASE_DIR) -> None:
+    """Ensure repository has git initialized, user identity, and remote set."""
+    if not repo_root.exists():
+        repo_root.mkdir(parents=True, exist_ok=True)
+
     # Check if inside git repo
-    res = run_git_cmd(["rev-parse", "--is-inside-work-tree"])
+    res = run_git_cmd(["rev-parse", "--is-inside-work-tree"], cwd=repo_root)
     if res.returncode != 0:
-        logger.info("Initializing new git repository in workspace...")
-        run_git_cmd(["init", "-b", config.get("branch", "main")])
+        logger.info(f"Initializing new git repository in: {repo_root}")
+        run_git_cmd(["init", "-b", config.get("branch", "main")], cwd=repo_root)
 
     # Configure local git user identity so GitHub links commits properly
     if config.get("git_user_name"):
-        run_git_cmd(["config", "user.name", config["git_user_name"]])
+        run_git_cmd(["config", "user.name", config["git_user_name"]], cwd=repo_root)
     if config.get("git_user_email"):
-        run_git_cmd(["config", "user.email", config["git_user_email"]])
+        run_git_cmd(["config", "user.email", config["git_user_email"]], cwd=repo_root)
 
     # Remote URL check / update
     remote_url = config.get("remote_url", "").strip()
     remote_name = config.get("remote_name", "origin")
     if remote_url:
-        res = run_git_cmd(["remote", "get-url", remote_name])
+        res = run_git_cmd(["remote", "get-url", remote_name], cwd=repo_root)
         if res.returncode == 0:
             current_remote = res.stdout.strip()
             if current_remote != remote_url:
-                logger.info(f"Updating remote '{remote_name}' to: {remote_url}")
-                run_git_cmd(["remote", "set-url", remote_name, remote_url])
+                logger.info(f"[{repo_root.name}] Updating remote '{remote_name}' to: {remote_url}")
+                run_git_cmd(["remote", "set-url", remote_name, remote_url], cwd=repo_root)
         else:
-            logger.info(f"Adding remote '{remote_name}': {remote_url}")
-            run_git_cmd(["remote", "add", remote_name, remote_url])
+            logger.info(f"[{repo_root.name}] Adding remote '{remote_name}': {remote_url}")
+            run_git_cmd(["remote", "add", remote_name, remote_url], cwd=repo_root)
 
 
-def get_queued_files(config: dict) -> list[Path]:
-    """Find all valid files waiting in queue directory."""
+def get_queued_files(config: dict, repo_filter: str = None) -> list[Path]:
+    """Find all valid files waiting in queue directory (optionally filtered by repo)."""
     queue_dir = BASE_DIR / config.get("queue_dir", "queue")
     if not queue_dir.exists():
         queue_dir.mkdir(parents=True, exist_ok=True)
@@ -162,6 +218,13 @@ def get_queued_files(config: dict) -> list[Path]:
                 continue
             full_path = Path(root) / file
             rel_path = full_path.relative_to(queue_dir)
+
+            # If repo_filter specified, check match
+            if repo_filter:
+                first_part = rel_path.parts[0] if len(rel_path.parts) > 1 else None
+                if first_part != repo_filter:
+                    continue
+
             candidates.append((full_path, rel_path))
 
     order = config.get("order", "alphabetical")
@@ -194,23 +257,22 @@ def get_unique_target_path(target_base: Path, rel_path: Path) -> Path:
 
 def upload_single_file(
     config: dict,
+    repo_name: str = None,
+    override_repo_dir: str = None,
     custom_date: datetime = None,
     dry_run: bool = False,
 ) -> dict:
     """
-    Pick the next file from queue, move it to uploads, commit, and push.
+    Pick the next file from queue, move it to target repo, commit, and push.
     Returns status dict.
     """
-    ensure_git_setup(config)
-
     queue_dir = BASE_DIR / config.get("queue_dir", "queue")
-    target_dir = BASE_DIR / config.get("target_dir", "uploads")
-    target_dir.mkdir(parents=True, exist_ok=True)
 
-    queued_files = get_queued_files(config)
+    queued_files = get_queued_files(config, repo_filter=repo_name)
     if not queued_files:
+        filter_msg = f" for repository '{repo_name}'" if repo_name else ""
         logger.warning(
-            f"No files found in '{queue_dir}'. Drop some files into the queue folder to upload!"
+            f"No files found in '{queue_dir}'{filter_msg}. Drop files into the queue to upload!"
         )
         return {
             "success": False,
@@ -220,8 +282,27 @@ def upload_single_file(
 
     rel_file = queued_files[0]
     source_file = queue_dir / rel_file
-    dest_file = get_unique_target_path(target_dir, rel_file)
-    dest_rel_repo = dest_file.relative_to(BASE_DIR).as_posix()
+
+    # Resolve repo context (merged config, repo key, and repo root)
+    repo_config, active_key, repo_root = resolve_repo_context(
+        config,
+        repo_name=repo_name,
+        rel_file=rel_file,
+        override_repo_dir=override_repo_dir,
+    )
+    ensure_git_setup(repo_config, repo_root=repo_root)
+
+    # If the file was in queue/<active_key>/file.ext, strip the repo folder prefix for the target destination
+    if len(rel_file.parts) > 1 and rel_file.parts[0] == active_key and active_key in config.get("repos", {}):
+        target_subpath = Path(*rel_file.parts[1:])
+    else:
+        target_subpath = rel_file
+
+    target_base = repo_root / repo_config.get("target_dir", "uploads")
+    target_base.mkdir(parents=True, exist_ok=True)
+
+    dest_file = get_unique_target_path(target_base, target_subpath)
+    dest_rel_repo = dest_file.relative_to(repo_root).as_posix()
 
     now = datetime.now()
     commit_dt = custom_date if custom_date else now
@@ -229,19 +310,20 @@ def upload_single_file(
     date_iso = commit_dt.strftime("%Y-%m-%d %H:%M:%S")
 
     # Format commit message
-    template = config.get(
+    template = repo_config.get(
         "commit_message_template", "Add {filename} - Daily commit [{date}]"
     )
     commit_msg = template.format(
         filename=source_file.name,
         date=date_str,
         datetime=date_iso,
+        repo=active_key,
     )
 
     remaining_after = len(queued_files) - 1
 
     if dry_run:
-        logger.info(f"[DRY-RUN] Would move: {source_file} -> {dest_file}")
+        logger.info(f"[DRY-RUN] [Repo: {active_key}] Would move: {source_file} -> {dest_file}")
         logger.info(f"[DRY-RUN] Commit date: {date_iso}")
         logger.info(f"[DRY-RUN] Commit message: '{commit_msg}'")
         logger.info(f"[DRY-RUN] Files remaining: {remaining_after}")
@@ -249,20 +331,26 @@ def upload_single_file(
             "success": True,
             "dry_run": True,
             "file": str(rel_file),
+            "repo": active_key,
             "files_remaining": remaining_after,
         }
 
     # 1. Move file
     dest_file.parent.mkdir(parents=True, exist_ok=True)
     shutil.move(str(source_file), str(dest_file))
-    logger.info(f"Moved file: {rel_file} -> {dest_rel_repo}")
+    logger.info(f"[{active_key}] Moved file: {rel_file} -> {dest_rel_repo}")
 
     # 2. Git stage (stage target file and source location in case source was previously tracked)
-    source_rel_repo = (BASE_DIR / config.get("queue_dir", "queue") / rel_file).relative_to(BASE_DIR).as_posix()
-    res_add = run_git_cmd(["add", "-A", "--", dest_rel_repo, source_rel_repo])
+    try:
+        source_rel_repo = source_file.relative_to(repo_root).as_posix()
+        res_add = run_git_cmd(["add", "-A", "--", dest_rel_repo, source_rel_repo], cwd=repo_root)
+    except ValueError:
+        # source_file was outside repo_root (e.g. queue was in central folder)
+        res_add = run_git_cmd(["add", dest_rel_repo], cwd=repo_root)
+
     if res_add.returncode != 0:
-        # Fallback to single add if pathspec had issues
-        res_add = run_git_cmd(["add", dest_rel_repo])
+        res_add = run_git_cmd(["add", dest_rel_repo], cwd=repo_root)
+
     if res_add.returncode != 0:
         error_msg = f"git add failed: {res_add.stderr.strip()}"
         logger.error(error_msg)
@@ -273,46 +361,47 @@ def upload_single_file(
         "GIT_AUTHOR_DATE": date_iso,
         "GIT_COMMITTER_DATE": date_iso,
     }
-    res_commit = run_git_cmd(["commit", "-m", commit_msg], env=git_env)
+    res_commit = run_git_cmd(["commit", "-m", commit_msg], cwd=repo_root, env=git_env)
     if res_commit.returncode != 0:
         error_msg = f"git commit failed: {res_commit.stderr.strip()}"
         logger.error(error_msg)
         return {"success": False, "message": error_msg}
 
     # Get commit hash
-    res_rev = run_git_cmd(["rev-parse", "HEAD"])
+    res_rev = run_git_cmd(["rev-parse", "HEAD"], cwd=repo_root)
     commit_hash = res_rev.stdout.strip()[:7] if res_rev.returncode == 0 else "unknown"
 
-    logger.info(f"Committed [{commit_hash}] '{commit_msg}' for date: {date_iso}")
+    logger.info(f"[{active_key}] Committed [{commit_hash}] '{commit_msg}' for date: {date_iso}")
 
     # 4. Git push (if configured)
     pushed = False
-    remote_url = config.get("remote_url", "").strip()
-    auto_push = config.get("auto_push", True)
-    remote_name = config.get("remote_name", "origin")
-    branch = config.get("branch", "main")
+    remote_url = repo_config.get("remote_url", "").strip()
+    auto_push = repo_config.get("auto_push", True)
+    remote_name = repo_config.get("remote_name", "origin")
+    branch = repo_config.get("branch", "main")
 
     if auto_push:
         if not remote_url:
             logger.warning(
-                "Remote URL is not set in config.json. Commit is saved locally. "
+                f"[{active_key}] Remote URL is not set. Commit saved locally in {repo_root.name}. "
                 "Set 'remote_url' to push to GitHub automatically."
             )
         else:
-            logger.info(f"Pushing to {remote_name}/{branch}...")
-            res_push = run_git_cmd(["push", "-u", remote_name, branch])
+            logger.info(f"[{active_key}] Pushing to {remote_name}/{branch}...")
+            res_push = run_git_cmd(["push", "-u", remote_name, branch], cwd=repo_root)
             if res_push.returncode == 0:
                 pushed = True
-                logger.info("Successfully pushed commit to GitHub!")
+                logger.info(f"[{active_key}] Successfully pushed commit to GitHub!")
             else:
                 logger.warning(
-                    f"git push failed ({res_push.stderr.strip()}). "
+                    f"[{active_key}] git push failed ({res_push.stderr.strip()}). "
                     "The commit remains safe locally. Check internet connection or credentials."
                 )
 
     # 5. Record to history
     entry = {
         "filename": source_file.name,
+        "repo": active_key,
         "source_path": str(rel_file),
         "target_path": str(dest_rel_repo),
         "commit_hash": commit_hash,
@@ -324,11 +413,12 @@ def upload_single_file(
     record_history(entry)
 
     logger.info(
-        f"[SUCCESS] Uploaded '{source_file.name}'. {remaining_after} file(s) remaining in queue."
+        f"[SUCCESS] [{active_key}] Uploaded '{source_file.name}'. {remaining_after} file(s) remaining in queue."
     )
     return {
         "success": True,
         "file": str(rel_file),
+        "repo": active_key,
         "commit_hash": commit_hash,
         "commit_date": date_iso,
         "pushed": pushed,
@@ -338,26 +428,26 @@ def upload_single_file(
 
 def upload_batch(
     config: dict,
+    repo_name: str = None,
+    override_repo_dir: str = None,
     count: int = 1,
     spread_days: bool = False,
     days_back: int = None,
     dry_run: bool = False,
 ) -> None:
     """Upload multiple files, optionally spreading them across distinct days."""
-    queued = get_queued_files(config)
+    queued = get_queued_files(config, repo_filter=repo_name)
     total_in_queue = len(queued)
     if total_in_queue == 0:
         logger.warning("Queue is empty. Drop files into 'queue/' folder first.")
         return
 
     n = min(count, total_in_queue)
-    logger.info(f"Starting batch upload for {n} file(s) (total in queue: {total_in_queue})...")
+    logger.info(f"Starting batch upload for {n} file(s) (total matching in queue: {total_in_queue})...")
 
     now = datetime.now()
-    # If spreading across days, calculate dates
     if spread_days:
         total_days = days_back if days_back is not None else n
-        # Spaced out dates: from (now - total_days) up to today
         dates = [
             now - timedelta(days=float(total_days) * (n - 1 - i) / max(1, n - 1))
             for i in range(n)
@@ -369,7 +459,13 @@ def upload_batch(
     for i in range(n):
         dt = dates[i]
         logger.info(f"--- Processing file {i + 1}/{n} ---")
-        result = upload_single_file(config, custom_date=dt, dry_run=dry_run)
+        result = upload_single_file(
+            config,
+            repo_name=repo_name,
+            override_repo_dir=override_repo_dir,
+            custom_date=dt,
+            dry_run=dry_run,
+        )
         if result.get("success"):
             success_count += 1
         else:
@@ -379,7 +475,7 @@ def upload_batch(
     logger.info(f"Batch completed: {success_count}/{n} file(s) uploaded successfully.")
 
 
-def run_daemon_schedule(config: dict, target_time_str: str) -> None:
+def run_daemon_schedule(config: dict, target_time_str: str, repo_name: str = None) -> None:
     """
     Run continuous daily schedule loop in-process.
     Waits until HH:MM every day and triggers 1 upload.
@@ -398,7 +494,6 @@ def run_daemon_schedule(config: dict, target_time_str: str) -> None:
             hour=target_hour, minute=target_minute, second=0, microsecond=0
         )
         if target_today <= now:
-            # Scheduled time for today already passed; schedule for tomorrow
             target_run = target_today + timedelta(days=1)
         else:
             target_run = target_today
@@ -410,8 +505,7 @@ def run_daemon_schedule(config: dict, target_time_str: str) -> None:
         try:
             time.sleep(wait_seconds)
             logger.info("Triggering scheduled daily upload...")
-            upload_single_file(config)
-            # Sleep 60 seconds to avoid double-triggering within the same minute
+            upload_single_file(config, repo_name=repo_name)
             time.sleep(60)
         except KeyboardInterrupt:
             logger.info("Daemon stopped by user.")
@@ -419,89 +513,143 @@ def run_daemon_schedule(config: dict, target_time_str: str) -> None:
 
 
 def show_status(config: dict) -> None:
-    """Print status of the queue, history, and git configuration."""
+    """Print status of the queue, repos, history, and git configuration."""
     queue_dir = BASE_DIR / config.get("queue_dir", "queue")
-    target_dir = BASE_DIR / config.get("target_dir", "uploads")
     queued_files = get_queued_files(config)
     history = load_history()
+    repos = config.get("repos", {})
 
-    print("\n" + "=" * 60)
-    print("      AUTOMATED GITHUB UPLOADER - SYSTEM STATUS")
-    print("=" * 60)
+    print("\n" + "=" * 65)
+    print("      AUTOMATED GITHUB UPLOADER - SYSTEM STATUS (REPO-WISE)")
+    print("=" * 65)
     print(f"Project Directory : {BASE_DIR}")
     print(f"Queue Directory   : {queue_dir}")
-    print(f"Uploads Directory : {target_dir}")
     print(f"Git Author        : {config.get('git_user_name')} <{config.get('git_user_email')}>")
-    print(f"Remote URL        : {config.get('remote_url') or '(Not set - local commits only)'}")
-    print(f"Target Branch     : {config.get('branch', 'main')}")
     print(f"Auto-Push to Git  : {config.get('auto_push')}")
-    print("-" * 60)
+
+    print("-" * 65)
+    print("REPOSITORIES CONFIGURED:")
+    if repos:
+        for r_name, r_cfg in repos.items():
+            url = r_cfg.get("remote_url") or "(Local commits only)"
+            br = r_cfg.get("branch", "main")
+            path = r_cfg.get("repo_path") or "(This project folder)"
+            print(f"   * [{r_name}] -> {url} [Branch: {br}]")
+            if r_cfg.get("repo_path"):
+                print(f"     Path: {path}")
+    else:
+        url = config.get("remote_url") or "(Not set - local commits only)"
+        br = config.get("branch", "main")
+        print(f"   * [default] -> {url} [Branch: {br}]")
+
+    print("-" * 65)
     print(f"Files in Queue    : {len(queued_files)}")
     if queued_files:
-        print("Next up:")
-        for idx, file in enumerate(queued_files[:5], 1):
-            print(f"   {idx}. {file}")
-        if len(queued_files) > 5:
-            print(f"   ... and {len(queued_files) - 5} more")
+        print("Queued items:")
+        for idx, file in enumerate(queued_files[:8], 1):
+            # Show repo tag if folder-based
+            first_part = file.parts[0] if len(file.parts) > 1 else "default"
+            tag = f"[{first_part}]" if first_part in repos else "[default]"
+            print(f"   {idx}. {tag} {file}")
+        if len(queued_files) > 8:
+            print(f"   ... and {len(queued_files) - 8} more")
     else:
-        print("   (Queue is empty. Drop files in 'queue/' to upload!)")
-    print("-" * 60)
+        print("   (Queue is empty. Drop files into 'queue/' to upload!)")
+
+    print("-" * 65)
     print(f"Total Committed   : {len(history)}")
     if history:
         print("Recent uploads:")
         for item in history[-5:]:
             date_info = item.get("commit_date") or item.get("timestamp")
-            print(f"   * [{item.get('commit_hash')}] {item.get('filename')} on {date_info} (Pushed: {item.get('pushed')})")
-    print("=" * 60 + "\n")
+            repo_tag = f"[{item.get('repo', 'default')}]"
+            print(f"   * {repo_tag} [{item.get('commit_hash')}] {item.get('filename')} on {date_info} (Pushed: {item.get('pushed')})")
+    print("=" * 65 + "\n")
 
 
 def interactive_setup() -> None:
-    """CLI wizard to configure remote, author info, and preferences."""
+    """CLI wizard to configure repos, author info, and preferences."""
     config = load_config()
-    print("\n" + "=" * 60)
+    print("\n" + "=" * 65)
     print("       GITHUB UPLOADER CONFIGURATION WIZARD")
-    print("=" * 60)
+    print("=" * 65)
 
-    # Remote URL
-    curr_url = config.get("remote_url", "")
-    print(f"\nCurrent GitHub Repository Remote URL: {curr_url or 'None'}")
-    new_url = input("Enter GitHub repository URL (e.g., https://github.com/konark-17/my-repo.git) [press Enter to keep]: ").strip()
-    if new_url:
-        config["remote_url"] = new_url
+    print("\nSelect Setup Mode:")
+    print("  1. Configure Single Repository (Default)")
+    print("  2. Add / Update a Named Repository Profile (Multi-Repo)")
+    print("  3. Set Git Author Identity (Name & Email)")
+    choice = input("Enter choice (1-3) [1]: ").strip() or "1"
 
-    # Git user name
-    curr_name = config.get("git_user_name", "konark-17")
-    new_name = input(f"Enter Git author name [{curr_name}]: ").strip()
-    if new_name:
-        config["git_user_name"] = new_name
+    if choice == "2":
+        repos = config.get("repos", {})
+        repo_name = input("Enter repository profile name (e.g. leetcode, networking, low-latency): ").strip()
+        if not repo_name:
+            print("[CANCELLED] Profile name cannot be empty.")
+            return
 
-    # Git user email
-    curr_email = config.get("git_user_email", "kona300107@gmail.com")
-    new_email = input(f"Enter Git author email [{curr_email}]: ").strip()
-    if new_email:
-        config["git_user_email"] = new_email
+        current_entry = repos.get(repo_name, {})
+        remote_url = input(f"GitHub Remote URL [{current_entry.get('remote_url', '')}]: ").strip()
+        branch = input(f"Branch name [{current_entry.get('branch', 'main')}]: ").strip() or "main"
+        repo_path = input(f"Local repo path (Leave empty to use this folder) [{current_entry.get('repo_path', '')}]: ").strip()
+        target_dir = input(f"Target upload subfolder inside repo [{current_entry.get('target_dir', 'uploads')}]: ").strip() or "uploads"
 
-    # Schedule time
-    curr_time = config.get("schedule_time", "10:00")
-    new_time = input(f"Enter daily scheduled upload time (24h format HH:MM) [{curr_time}]: ").strip()
-    if new_time:
-        config["schedule_time"] = new_time
+        entry = {
+            "remote_url": remote_url if remote_url else current_entry.get("remote_url", ""),
+            "branch": branch,
+            "target_dir": target_dir,
+        }
+        if repo_path:
+            entry["repo_path"] = repo_path
 
-    # Save
-    save_config(config)
-    ensure_git_setup(config)
-    print("\n[SUCCESS] Configuration saved to config.json!")
+        repos[repo_name] = entry
+        config["repos"] = repos
+        save_config(config)
+        print(f"\n[SUCCESS] Profile '{repo_name}' saved!")
+
+    elif choice == "3":
+        name = input(f"Git author name [{config.get('git_user_name', 'konark-17')}]: ").strip()
+        email = input(f"Git author email [{config.get('git_user_email', 'kona300107@gmail.com')}]: ").strip()
+        if name:
+            config["git_user_name"] = name
+        if email:
+            config["git_user_email"] = email
+        save_config(config)
+        print("\n[SUCCESS] Author details saved!")
+
+    else:
+        curr_url = config.get("remote_url", "")
+        new_url = input(f"GitHub Remote URL [{curr_url or 'None'}]: ").strip()
+        if new_url:
+            config["remote_url"] = new_url
+        branch = input(f"Target branch [{config.get('branch', 'main')}]: ").strip()
+        if branch:
+            config["branch"] = branch
+        save_config(config)
+        print("\n[SUCCESS] Default repository configuration updated!")
+
     show_status(config)
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Automated GitHub File Uploader (One-by-one / Daily / Streak)"
+        description="Automated GitHub File Uploader (Single-Repo & Multi-Repo Wise)"
     )
     parser.add_argument(
         "--upload-one",
         action="store_true",
         help="Upload the next single file from the queue (default action)",
+    )
+    parser.add_argument(
+        "--repo",
+        type=str,
+        default=None,
+        help="Target a specific configured repository profile (e.g. --repo leetcode)",
+    )
+    parser.add_argument(
+        "--repo-dir",
+        type=str,
+        default=None,
+        help="Target a specific local git repository directory on disk",
     )
     parser.add_argument(
         "--count",
@@ -534,7 +682,7 @@ def main():
     parser.add_argument(
         "--setup",
         action="store_true",
-        help="Run interactive configuration wizard",
+        help="Run interactive configuration wizard (add repos, remote URLs, author)",
     )
     parser.add_argument(
         "--dry-run",
@@ -559,13 +707,16 @@ def main():
             if args.schedule == "DEFAULT"
             else args.schedule
         )
-        run_daemon_schedule(config, schedule_time)
+        run_daemon_schedule(config, schedule_time, repo_name=args.repo)
         return
 
     if args.spread:
-        count = args.count if args.count else len(get_queued_files(config))
+        queued = get_queued_files(config, repo_filter=args.repo)
+        count = args.count if args.count else len(queued)
         upload_batch(
             config,
+            repo_name=args.repo,
+            override_repo_dir=args.repo_dir,
             count=count,
             spread_days=True,
             days_back=args.days_back,
@@ -574,11 +725,22 @@ def main():
         return
 
     if args.count and args.count > 1:
-        upload_batch(config, count=args.count, dry_run=args.dry_run)
+        upload_batch(
+            config,
+            repo_name=args.repo,
+            override_repo_dir=args.repo_dir,
+            count=args.count,
+            dry_run=args.dry_run,
+        )
         return
 
     # Default action: upload 1 file right now
-    result = upload_single_file(config, dry_run=args.dry_run)
+    result = upload_single_file(
+        config,
+        repo_name=args.repo,
+        override_repo_dir=args.repo_dir,
+        dry_run=args.dry_run,
+    )
     if not result.get("success") and result.get("message") == "Queue is empty":
         show_status(config)
 

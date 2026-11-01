@@ -129,6 +129,39 @@ class TestUploader(unittest.TestCase):
         self.assertIn("spread_file_2.txt", log_res.stdout)
         self.assertIn("spread_file_3.txt", log_res.stdout)
 
+    def test_multi_repo_support(self):
+        # Configure multiple repos
+        self.config["repos"] = {
+            "leetcode": {
+                "target_dir": "uploads/leetcode",
+                "branch": "main",
+            },
+            "networking": {
+                "target_dir": "uploads/networking",
+                "branch": "main",
+            }
+        }
+        # Place files under repo folders
+        (self.queue_dir / "leetcode").mkdir(parents=True)
+        (self.queue_dir / "leetcode" / "two_sum.cpp").write_text("// two sum", encoding="utf-8")
+        (self.queue_dir / "networking").mkdir(parents=True)
+        (self.queue_dir / "networking" / "sniffer.go").write_text("// sniffer", encoding="utf-8")
+
+        # Test filtering
+        leetcode_files = uploader.get_queued_files(self.config, repo_filter="leetcode")
+        self.assertEqual(len(leetcode_files), 1)
+        self.assertEqual(leetcode_files[0].name, "two_sum.cpp")
+
+        # Upload leetcode file
+        res = uploader.upload_single_file(self.config, repo_name="leetcode")
+        self.assertTrue(res["success"])
+        self.assertEqual(res["repo"], "leetcode")
+        self.assertTrue((self.uploads_dir / "leetcode" / "two_sum.cpp").exists())
+
+        # Check history has repo recorded
+        history = uploader.load_history()
+        self.assertEqual(history[-1]["repo"], "leetcode")
+
 
 if __name__ == "__main__":
     unittest.main()

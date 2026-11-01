@@ -19,6 +19,27 @@ An automated system to upload files to GitHub one by one to steadily increase yo
 
 ---
 
+## 🌐 Web Application Dashboard
+
+A full-featured visual dashboard built with **FastAPI** is included!
+
+### How to Launch:
+Double-click **`start_web_app.bat`** (or run `python web_app.py`).
+It starts the web server and automatically opens your browser to:
+👉 **`http://localhost:8000`**
+
+### Web Dashboard Features:
+1. **Interactive GitHub Heatmap Matrix**: Displays your commit streak visually with interactive hover tooltips.
+2. **Drag & Drop Queue Manager**: Drop files or code snippets directly onto the browser window into any repository queue.
+3. **Queue File Actions**: View pending files, preview code in a popup modal, or delete items.
+4. **1-Click Upload Trigger**: Upload the next single file on demand with instant feedback.
+5. **Streak Spreader Controls**: Choose how many files to upload and backdate them across past N days with a visual slider.
+6. **Repo-Wise Manager**: Add, edit, test GitHub connectivity (`git ls-remote`), and manage multiple repository profiles.
+7. **Windows Task Scheduler Center**: Enable/disable daily automatic uploads at your chosen time (e.g. 10:00 AM) with 1 click.
+8. **Live Terminal Console**: Streams real-time commit logs from `logs/uploader.log`.
+
+---
+
 ## 🛠️ Quick Start
 
 ### 1. Configure GitHub Repo & Identity

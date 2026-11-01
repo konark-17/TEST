@@ -1,0 +1,13 @@
+{
+  "queue_dir": "queue",
+  "target_dir": "uploads",
+  "remote_name": "origin",
+  "branch": "main",
+  "remote_url": "",
+  "git_user_name": "konark-17",
+  "git_user_email": "kona300107@gmail.com",
+  "commit_message_template": "Add {filename} - Daily commit [{date}]",
+  "auto_push": true,
+  "schedule_time": "10:00",
+  "order": "alphabetical"
+}

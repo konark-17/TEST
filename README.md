@@ -1,184 +1,239 @@
-# Automated GitHub File Uploader 🚀
+# ⚡ GitStreak — Automated GitHub Commit Engine & Multi-Repo Dashboard
 
-An automated system to upload files to GitHub one by one to steadily increase your commit activity and maintain a daily GitHub contribution streak.
+<div align="center">
 
----
+[![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.109+-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![TailwindCSS](https://img.shields.io/badge/TailwindCSS-CDN-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com)
+[![Platform](https://img.shields.io/badge/Platform-Windows%2011%20%7C%2010-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://microsoft.com/windows)
+[![Git](https://img.shields.io/badge/Git-Automation-F05032?style=for-the-badge&logo=git&logoColor=white)](https://git-scm.com)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
 
-## 🌟 How It Works
+**An intelligent, multi-repository automated GitHub file uploader and streak pacing system with a modern FastAPI web dashboard and headless Windows Task Scheduler integration.**
 
-1. **Queue Files**: Place any files (code solutions, notes, projects, markdown, etc.) inside the `queue/` folder.
-2. **Trigger Upload**:
-   - **On Demand**: Double-click `run_once.bat` or run `python uploader.py` to upload the next single file immediately.
-   - **Automated Daily**: Use `setup_scheduler.bat` to have Windows automatically upload 1 file every day at your preferred time (e.g. 10:00 AM) in the background.
-   - **Streak Builder**: Use `--spread` to commit a batch of files backdated across the last N days (1 commit per day) to light up your GitHub contribution graph.
-3. **Commit & Push**:
-   - The file is cleanly moved from `queue/` to `uploads/`.
-   - Staged and committed with a custom date-stamped message.
-   - Automatically pushed to your GitHub repository.
-   - Progress is logged in `upload_history.json`.
+[Key Features](#-key-features) • [Quick Start](#-quick-start) • [Web Dashboard](#-web-dashboard) • [Architecture](#-architecture) • [CLI Commands](#-cli-commands) • [REST API](#-rest-api-reference)
+
+</div>
 
 ---
 
-## 🌐 Web Application Dashboard
+## 📖 Overview
 
-A full-featured visual dashboard built with **FastAPI** is included!
+Maintaining a consistent GitHub commit graph requires daily discipline. **GitStreak** automates this by systematically uploading your queued files, solutions, and code notes one by one into your target GitHub repositories.
 
-### How to Launch:
-Double-click **`start_web_app.bat`** (or run `python web_app.py`).
-It starts the web server and automatically opens your browser to:
-👉 **`http://localhost:8000`**
-
-### Web Dashboard Features:
-1. **Interactive GitHub Heatmap Matrix**: Displays your commit streak visually with interactive hover tooltips.
-2. **Drag & Drop Queue Manager**: Drop files or code snippets directly onto the browser window into any repository queue.
-3. **Queue File Actions**: View pending files, preview code in a popup modal, or delete items.
-4. **1-Click Upload Trigger**: Upload the next single file on demand with instant feedback.
-5. **Streak Spreader Controls**: Choose how many files to upload and backdate them across past N days with a visual slider.
-6. **Repo-Wise Manager**: Add, edit, test GitHub connectivity (`git ls-remote`), and manage multiple repository profiles.
-7. **Windows Task Scheduler Center**: Enable/disable daily automatic uploads at your chosen time (e.g. 10:00 AM) with 1 click.
-8. **Live Terminal Console**: Streams real-time commit logs from `logs/uploader.log`.
+Whether you are pacing your daily LeetCode solutions, syncing project modules, backdating a streak across past days, or routing uploads across 10+ different repositories, GitStreak provides a full-featured visual dashboard and a headless background daemon that runs silently on Windows.
 
 ---
 
-## 🛠️ Quick Start
+## 🌟 Key Features
 
-### 1. Configure GitHub Repo & Identity
-Open [config.json](file:///c:/Users/KONARK/OneDrive/Desktop/project/Automated%20Github%20uploader/config.json):
-```json
-{
-  "queue_dir": "queue",
-  "target_dir": "uploads",
-  "remote_name": "origin",
-  "branch": "main",
-  "remote_url": "https://github.com/konark-17/<your-repo-name>.git",
-  "git_user_name": "konark-17",
-  "git_user_email": "kona300107@gmail.com",
-  "commit_message_template": "Add {filename} - Daily commit [{date}]",
-  "auto_push": true,
-  "schedule_time": "10:00",
-  "order": "alphabetical"
-}
-```
-> **Tip:** You can also run the interactive wizard:
-> ```powershell
-> python uploader.py --setup
-> ```
+### 1. 🗂️ First-Class Multi-Repo Routing & Compulsory Target Selection
+- Manage multiple independent repository profiles (`leetcode`, `ZeroLOB`, `RoutePulse`, `TEST`, etc.).
+- **Compulsory Selection**: No ambiguous "default" fallback; every file uploaded must be explicitly targeted to prevent accidental commits.
+- **Isolated Workspaces**: External repositories with their own remotes are isolated in dedicated directories (`.uploader_repos/<repo_name>`), ensuring your main repository is never cross-polluted.
 
-### 2. Put Files in Queue
-Drop any files you want uploaded into the `queue/` directory.
+### 2. 🌐 Modern FastAPI Web Dashboard
+- **Glassmorphism UI**: Built with TailwindCSS and Lucide Icons with dark mode styling.
+- **Interactive Heatmap**: 60-day GitHub-style contribution matrix with hover details and commit metrics.
+- **Drag & Drop Upload Zone**: Drop code files directly into the browser to queue them for any repository.
+- **Queue Explorer**: Preview file contents, inspect sizes, and remove queued items in real time.
+- **Real-Time Log Stream**: Live terminal logs streamed directly to the browser via SSE / poll.
 
-### 3. Trigger 1 Upload
-Double-click `run_once.bat` or run:
-```powershell
-python uploader.py
-```
-This commits the next file and pushes it to your GitHub repository!
+### 3. 🔥 Intelligent Streak Spreader (`--spread`)
+- Spreads queued files across past dates (1 commit per day) using Git's native `GIT_AUTHOR_DATE` and `GIT_COMMITTER_DATE`.
+- Perfect for populating historical contribution squares with authentic, single-file commits.
+
+### 4. ⏰ Headless Windows Daily Automation
+- Native **Windows Task Scheduler** integration via PowerShell.
+- Runs completely in the background once per day (e.g. at 10:00 AM) without needing a terminal or browser window open.
+- Manage scheduling directly from the Web UI or via `setup_scheduler.bat`.
+
+### 5. 🔄 1-Click GitHub Account Sync
+- Automatically imports all public repositories from your GitHub account (`konark-17`) into your config.
+- Scans sibling folders on disk to detect local Git projects and links them with a single click.
+- Two-way GitHub sync center: inspect unpushed/unpulled commit divergence, pull updates, or force sync.
 
 ---
 
-## ⏰ Automating Daily Uploads (Windows Task Scheduler)
+## 🏗️ Architecture
 
-To have Windows upload one file every day in the background without needing to keep a terminal open:
+```mermaid
+flowchart TD
+    subgraph Input["Queue & Staging"]
+        A[Local Files / Code / Notes] --> B[queue/&lt;repo_name&gt;/]
+        WebDrop[Web Dashboard Drag & Drop] --> B
+    end
 
-1. Double-click **`setup_scheduler.bat`** (or run `powershell -ExecutionPolicy Bypass -File setup_scheduler.ps1 -Action menu`).
-2. Choose:
-   - `1`: Install Daily Schedule (Runs daily at 10:00 AM)
-   - `2`: Install with Custom Daily Time (e.g. `09:30` or `19:00`)
-   - `3`: Check Scheduled Task Status
-   - `4`: Test Run Task Now
-   - `5`: Remove Scheduled Task
+    subgraph Engine["GitStreak Core Engine (uploader.py)"]
+        B --> C{Scheduler / Trigger}
+        C -->|Daily 10:00 AM| D[Windows Task Scheduler]
+        C -->|Manual Click| E[Web App / run_once.bat]
+        C -->|Streak Spreader| F[--spread --days-back N]
+        
+        D & E & F --> G[Queue Parser & Collision Resolver]
+        G --> H[Repository Context Resolver]
+    end
 
-The scheduled task runs completely headless in the background and writes activity logs to `logs/uploader.log`.
+    subgraph Targets["Repository Execution"]
+        H -->|Target: TEST / LeetCode| I[Central Workspace / uploads/]
+        H -->|Target: External Repo| J[Isolated Workspace: .uploader_repos/&lt;repo&gt;]
+        H -->|Target: Local Project| K[Local Project Dir on Disk]
+    end
 
----
-
-## 🔥 Pro Feature: Commit Streak Builder (`--spread`)
-
-If you have 10, 20, or 30 files in `queue/` and want them to appear as **1 commit per day** over the past 30 days on your GitHub contribution graph:
-
-```powershell
-# Spread all queued files across the past 30 days (1 commit each day)
-python uploader.py --spread --days-back 30
-```
-
-This uses Git's `GIT_AUTHOR_DATE` and `GIT_COMMITTER_DATE` to legitimately backdate each individual commit on consecutive days, then pushes them to GitHub.
-
----
-
-## 🔥 Multi-Repo & Repo-Wise Support
-
-You can configure the uploader to target **a single repository**, **multiple named repositories**, or **any local git folder**:
-
-### Method 1: Subfolder Auto-Routing (Recommended)
-Place files in `queue/` grouped by repository name:
-```
-queue/
-├── leetcode/
-│   ├── problem_01.py
-│   └── problem_02.py
-└── networking/
-    ├── packet_parser.go
-    └── tcp_client.c
-```
-In `config.json`:
-```json
-{
-  "repos": {
-    "leetcode": {
-      "remote_url": "https://github.com/konark-17/leetcode-solutions.git",
-      "target_dir": "uploads/leetcode"
-    },
-    "networking": {
-      "remote_url": "https://github.com/konark-17/networking-projects.git",
-      "target_dir": "uploads/networking"
-    }
-  }
-}
-```
-The uploader automatically detects the folder name (`leetcode`, `networking`) and commits to the corresponding repository!
-
-### Method 2: Target a Specific Repo via CLI
-```powershell
-python uploader.py --repo leetcode
-```
-
-### Method 3: Target Any Local Git Repository on Your Disk
-```powershell
-python uploader.py --repo-dir "c:\Users\KONARK\OneDrive\Desktop\project\Low Latency"
+    subgraph GitHub["GitHub Remote"]
+        I -->|git commit & push| GH1[konark-17/TEST.git]
+        J -->|git commit & push| GH2[konark-17/ZeroLOB.git]
+        K -->|git commit & push| GH3[konark-17/Custom.git]
+    end
 ```
 
 ---
 
-## 💻 CLI Commands & Options
+## 🚀 Quick Start
 
-| Command | Description |
+### Prerequisites
+- Windows 10 or 11
+- Python 3.10+
+- Git installed and configured with your GitHub credentials
+
+### Installation
+
+1. **Clone or Download this repository**:
+   ```powershell
+   git clone https://github.com/konark-17/GitStreak.git
+   cd GitStreak
+   ```
+
+2. **Install Python dependencies**:
+   ```powershell
+   pip install fastapi uvicorn requests python-multipart
+   ```
+
+3. **Launch the Visual Web Dashboard**:
+   Double-click **`start_web_app.bat`** (or run `python web_app.py`).  
+   Your default browser will automatically open to:  
+   👉 **`http://localhost:8000`**
+
+---
+
+## 🖥️ Web Dashboard
+
+The web application runs locally and exposes full control over the engine:
+
+| Dashboard Card | Functionality |
+|---|---|
+| **Contribution Heatmap** | 60-day matrix displaying all local and pushed commits with date tooltips |
+| **Dropzone** | Drag & drop files directly into any target repository profile |
+| **Queue Table** | Real-time queue inspector with filter-by-repo and code preview popup |
+| **Streak Spreader** | Slider to choose file count and days to span commits across |
+| **Task Scheduler** | 1-click install, uninstall, or time-change for Windows daily background task |
+| **Repo Center** | Add custom Git remotes, sync account repos, or link local directories |
+| **Sync Center** | Check ahead/behind divergence against GitHub and trigger push/pull |
+
+---
+
+## ⏰ Windows Background Automation
+
+Run headless daily commits without opening any software:
+
+- **Via Web Dashboard**: Open `http://localhost:8000`, set your daily time (default: `10:00`), and click **Install Schedule**.
+- **Via Batch Script**: Double-click **`setup_scheduler.bat`** and choose:
+  - `1`: Install Daily Schedule (10:00 AM)
+  - `2`: Install with Custom Time (e.g., `09:30` or `19:00`)
+  - `3`: Check Status
+  - `4`: Test Run Task Now
+  - `5`: Remove Task
+
+Activity is logged to `logs/uploader.log`.
+
+---
+
+## 💻 CLI Commands
+
+| Command | Action |
 |---|---|
 | `python uploader.py` | Upload next 1 file from queue right now |
-| `python uploader.py --repo <name>` | Upload next file for a specific configured repository profile |
-| `python uploader.py --repo-dir <path>` | Target any local git repository on your machine |
-| `python uploader.py --dry-run` | Preview what file would be uploaded without changing anything |
-| `python uploader.py --status` | View queue breakdown per repo, total committed, and git settings |
-| `python uploader.py --count 3` | Upload 3 files one by one with 3 separate commits |
-| `python uploader.py --spread --days-back 14` | Commit queued files backdated across the past 14 days |
-| `python uploader.py --schedule 10:00` | Run continuously in terminal, uploading daily at 10:00 |
-| `python uploader.py --setup` | Run interactive CLI setup wizard (add repos, URLs, author) |
+| `python uploader.py --repo <name>` | Upload next file targeting a specific repository profile |
+| `python uploader.py --status` | View queue breakdown per repo, history, and configured remotes |
+| `python uploader.py --count 5` | Upload 5 files sequentially with 5 separate commits |
+| `python uploader.py --repo <name> --count 10 --spread --days-back 10` | Backdate 10 commits across the past 10 days |
+| `python uploader.py --dry-run` | Preview what file would be committed without making changes |
+| `python uploader.py --sync-all-github` | Fetch and register all public repositories from GitHub |
+| `python uploader.py --setup` | Interactive command-line setup wizard |
 
 ---
 
-## 📁 Project Structure
+## 🔌 REST API Reference
 
-```
-Automated Github uploader/
-├── queue/                   # Drop files here to be committed
-├── uploads/                 # Successfully committed files move here
-├── logs/                    # Automated scheduler run logs
-├── config.json              # Repository & author configuration
-├── uploader.py              # Main Python engine
-├── run_once.bat             # 1-click trigger to upload 1 file now
-├── status.bat               # 1-click queue & history status check
-├── setup_scheduler.bat      # 1-click Windows Task Scheduler manager
+The FastAPI backend exposes endpoints for automation and external scripts:
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/api/status` | Comprehensive status of queue, config, history, and scheduler |
+| `POST` | `/api/upload-single` | Trigger single file upload (`{ "repo": "name", "dry_run": false }`) |
+| `POST` | `/api/upload-batch` | Trigger batch / streak upload with backdating |
+| `POST` | `/api/queue/upload` | Multipart form upload of files into a repository queue |
+| `GET` | `/api/queue/preview/{path}` | Preview text content of any queued file |
+| `DELETE` | `/api/queue/{path}` | Delete a file from the queue |
+| `GET` | `/api/repos/local-detected`| Auto-detect local Git project folders on machine |
+| `POST` | `/api/github/sync-all-repos`| Import all repositories from GitHub account |
+| `GET` | `/api/sync/status` | Check commit divergence (`ahead` / `behind`) for target repo |
+| `POST` | `/api/sync` | Execute `push`, `pull`, or two-way `sync` |
+| `GET` | `/api/logs` | Fetch real-time tail of `uploader.log` |
+
+---
+
+## 📁 Repository Structure
+
+```text
+GitStreak/
+├── queue/                   # Drop files here (organized by subfolder: queue/<repo>/)
+├── uploads/                 # Target folder for local repository uploads
+├── logs/                    # Background scheduler execution logs
+├── web/
+│   ├── static/              # Frontend CSS & JavaScript (app.js)
+│   └── templates/           # Dashboard HTML template (index.html)
+├── config.json              # Repository profiles & author settings
+├── uploader.py              # Main Git commit & scheduling engine
+├── web_app.py               # FastAPI backend server
+├── run_once.bat             # 1-click launcher: Upload 1 file now
+├── start_web_app.bat        # 1-click launcher: Open Visual Dashboard
+├── status.bat               # 1-click launcher: View CLI status
+├── sync_all_repos.bat       # 1-click launcher: Sync all GitHub account repos
+├── setup_scheduler.bat      # Windows Task Scheduler manager menu
 ├── setup_scheduler.ps1      # PowerShell backend for Task Scheduler
-├── upload_history.json      # Record of all uploaded files & commit hashes
-└── test_uploader.py         # Unit & integration tests
+├── publish_to_github.bat    # 1-click launcher: Publish GitStreak to GitHub
+├── upload_history.json      # Persistent log of all committed files & hashes
+├── test_uploader.py         # Test suite for uploader engine
+└── test_web_app.py          # Test suite for FastAPI endpoints
 ```
 
+---
+
+## 🧪 Testing
+
+Comprehensive unit and integration test suites are included:
+
+```powershell
+# Run core uploader engine tests (7 tests)
+python test_uploader.py
+
+# Run FastAPI web app and API tests (9 tests)
+python test_web_app.py
+```
+
+Both test suites run in isolated temporary sandboxes without modifying your local repository.
+
+---
+
+## 👤 Author
+
+**Konark**
+- GitHub: [@konark-17](https://github.com/konark-17)
+- Email: [kona300107@gmail.com](mailto:kona300107@gmail.com)
+
+---
+
+## 📄 License
+
+This project is licensed under the [MIT License](LICENSE).
